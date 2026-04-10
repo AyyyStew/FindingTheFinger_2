@@ -1,0 +1,6 @@
+venv/
+*.pyc
+
+gurbanidb.sqlite
+gurbanidb_v2.mysql.sqldata
+gurbanidb_v2.mysql.sql.zip
