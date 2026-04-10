@@ -1,0 +1,103 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-16) var(--space-4) var(--space-12);
+}
+
+/* Header */
+.header {
+  text-align: center;
+  margin-bottom: var(--space-10);
+}
+
+.title {
+  font-family: var(--font-serif);
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-normal);
+  color: var(--color-text-primary);
+  letter-spacing: 0.02em;
+  margin-bottom: var(--space-2);
+}
+
+.subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Search section */
+.searchSection {
+  width: 100%;
+  max-width: var(--max-width-content);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Results section */
+.results {
+  width: 100%;
+  max-width: var(--max-width-content);
+  margin-top: var(--space-10);
+}
+
+.resultsHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.resultsTitle {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.resultsCount {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.modeTag {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  text-transform: capitalize;
+}
+
+.resultList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Error state */
+.error {
+  padding: var(--space-5) var(--space-6);
+  background: var(--color-error-dim);
+  border: 1px solid rgba(224, 92, 92, 0.25);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
+  color: var(--color-error);
+}
+
+/* Empty state */
+.empty {
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
+  color: var(--color-text-muted);
+}
