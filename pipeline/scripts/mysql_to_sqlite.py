@@ -6,8 +6,8 @@ import sqlite3
 import sys
 
 #hardcoded but idgaf, this is a one off
-INPUT = "data/raw/Indic_Dharmic/Sikhism/sggs/gurbanidb_v2.mysql.sql"
-OUTPUT = "data/raw/Indic_Dharmic/Sikhism/sggs/gurbanidb.sqlite"
+INPUT = "../../data/Indic_Dharmic/Sikhism/sggs/gurbanidb_v2.mysql.sql"
+OUTPUT = "../../data/Indic_Dharmic/Sikhism/sggs/gurbanidb.sqlite"
 
 def convert_line(line):
     # Skip MySQL-specific directives
