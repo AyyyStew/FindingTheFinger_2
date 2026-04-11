@@ -16,6 +16,13 @@ import {
   type StandardRunData,
   type PcaManifest,
 } from '../utils/projectionLoader';
+
+const METHOD_TOOLTIPS: Record<ProjectionMethod, string> = {
+  umap:   'UMAP — preserves local neighborhood structure. Best for revealing clusters and local groupings.',
+  pca:    'PCA — linear projection onto axes of maximum variance. Good for global structure; axes are interpretable.',
+  phate:  'PHATE — diffusion-based geometry. Preserves both local clusters and global continuous trajectories.',
+  isomap: 'Isomap — geodesic distances on a manifold. Preserves global curved structure and inter-cluster geometry.',
+};
 import { MapCanvas, type HoverInfo } from '../components/MapCanvas/MapCanvas';
 import { LayerPanel } from '../components/LayerPanel/LayerPanel';
 import { UnitCard } from '../components/UnitCard/UnitCard';
@@ -126,13 +133,15 @@ export function Map() {
         <div className={styles.toolbar}>
           <div className={styles.methodSelector}>
             {PROJECTION_METHODS.map(m => (
-              <button
-                key={m}
-                className={`${styles.methodBtn} ${m === method ? styles.methodBtnActive : ''}`}
-                onClick={() => handleMethodChange(m)}
-              >
-                {METHOD_LABELS[m]}
-              </button>
+              <div key={m} className={styles.methodBtnWrap}>
+                <button
+                  className={`${styles.methodBtn} ${m === method ? styles.methodBtnActive : ''}`}
+                  onClick={() => handleMethodChange(m)}
+                >
+                  {METHOD_LABELS[m]}
+                </button>
+                <div className={styles.methodTooltip}>{METHOD_TOOLTIPS[m]}</div>
+              </div>
             ))}
           </div>
 
@@ -172,13 +181,14 @@ export function Map() {
         </div>
 
         <div className={styles.canvasInner}>
-          {loading || !resolvedData || !resolvedVisibility ? (
+          {loading || !resolvedData || !resolvedVisibility || projData?.manifest.method !== method ? (
             <div className={styles.centred}>
               <p className={styles.loadingText}>{message || 'Loading…'}</p>
             </div>
           ) : (
             <>
               <MapCanvas
+                key={method}
                 data={resolvedData}
                 visibility={resolvedVisibility}
                 colorMap={colorMap}
