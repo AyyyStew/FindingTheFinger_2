@@ -154,16 +154,27 @@ export function UnitChildren({ unitId, height }: Props) {
 
   if (!enabled || children.length === 0) return null
 
-  // height=1: chapter selected → flat verse list
+  // height=1: chapter selected → capped verse list with show all/less
   if (h === 1) {
+    const visibleVerses = showAll ? children : children.slice(0, CHAPTER_CAP)
     return (
       <div className={styles.root}>
-        {children.map((v) => (
+        {visibleVerses.map((v) => (
           <div key={v.id} className={styles.verse}>
             {v.reference_label && <span className={styles.verseLabel}>{v.reference_label}</span>}
             {v.text && <span className={styles.verseText}>{v.text}</span>}
           </div>
         ))}
+        {!showAll && children.length > CHAPTER_CAP && (
+          <button className={styles.actionBtn} onClick={() => setShowAll(true)}>
+            Show all
+          </button>
+        )}
+        {showAll && children.length > CHAPTER_CAP && (
+          <button className={styles.actionBtn} onClick={() => setShowAll(false)}>
+            Show less
+          </button>
+        )}
       </div>
     )
   }
