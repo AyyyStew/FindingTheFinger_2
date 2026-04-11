@@ -3,6 +3,7 @@ import {
   fetchLatestRunId,
   fetchManifest,
   fetchHeightBin,
+  fetchDepthBin,
   fetchUnitLabels,
   computeBounds,
   type ProjectionMethod,
@@ -11,6 +12,8 @@ import {
   type PcaRunData,
   type HeightLayerData,
   type PcaHeightLayerData,
+  type DepthLayerData,
+  type PcaDepthLayerData,
 } from '../utils/projectionLoader';
 
 export interface UseProjectionDataResult {
@@ -58,9 +61,12 @@ export function useProjectionData(method: ProjectionMethod): UseProjectionDataRe
           message: `Loading ${manifest.heights.length} point layers…`,
         }));
 
-        const [layerResults, unitLabels] = await Promise.all([
+        const [layerResults, depthLayerResults, unitLabels] = await Promise.all([
           Promise.all(
             manifest.heights.map(h => fetchHeightBin(runId, method, h, manifest)),
+          ),
+          Promise.all(
+            manifest.depths.map(d => fetchDepthBin(runId, method, d, manifest)),
           ),
           fetchUnitLabels(runId, method),
         ]);
@@ -72,13 +78,19 @@ export function useProjectionData(method: ProjectionMethod): UseProjectionDataRe
           const layers = new Map(
             layerResults.map(l => [l.height, l as PcaHeightLayerData]),
           );
-          result = { manifest, layers, unitLabels } as PcaRunData;
+          const depthLayers = new Map(
+            depthLayerResults.map(l => [(l as PcaDepthLayerData).depth, l as PcaDepthLayerData]),
+          );
+          result = { manifest, layers, depthLayers, unitLabels } as PcaRunData;
         } else {
           const layers = new Map(
             layerResults.map(l => [l.height, l as HeightLayerData]),
           );
+          const depthLayers = new Map(
+            depthLayerResults.map(l => [(l as DepthLayerData).depth, l as DepthLayerData]),
+          );
           const bounds = computeBounds(layers);
-          result = { manifest, layers, unitLabels, bounds } as StandardRunData;
+          result = { manifest, layers, depthLayers, unitLabels, bounds } as StandardRunData;
         }
 
         _cache.set(method, result);

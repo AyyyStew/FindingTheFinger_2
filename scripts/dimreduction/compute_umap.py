@@ -134,6 +134,7 @@ def main(run_id: str | None = None) -> None:
         },
         positions       = positions,
         height_of       = height_of,
+        depth_of        = depth_of,
         corpus_id_of    = corpus_id_of,
         corpus_seqs     = corpus_seqs,
         leaf_ancestors  = leaf_ancestors,

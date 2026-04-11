@@ -294,6 +294,7 @@ def write_method_output(
     manifest_extra: dict[str, Any],
     positions: dict[int, np.ndarray],
     height_of: dict[int, int],
+    depth_of: dict[int, int],
     corpus_id_of: dict[int, int],
     corpus_seqs: dict[int, int],
     leaf_ancestors: dict[int, dict[int, int]],
@@ -305,12 +306,16 @@ def write_method_output(
     Write binary + JSON output for one method under:
         <base_output_dir>/<run_id>/<method_name>/
 
-    Also writes the per-method latest pointer:
+    Writes both height_N.bin (grouped by height from leaf) and
+    depth_N.bin (grouped by depth from root) so the frontend can
+    toggle either grouping. Also writes the per-method latest pointer:
         <base_output_dir>/<method_name>/latest.json
     """
     method_dir = base_output_dir / run_id / method_name
     method_dir.mkdir(parents=True, exist_ok=True)
     print(f"\nWriting output to {method_dir}/")
+
+    # ── Height bins ───────────────────────────────────────────────────────────
 
     by_height: dict[int, list[int]] = defaultdict(list)
     for uid in positions:
@@ -348,6 +353,38 @@ def write_method_output(
         point_counts[str(h)] = len(uids)
         print(f"  height_{h}.bin  {len(uids):,} points")
 
+    # ── Depth bins ────────────────────────────────────────────────────────────
+    # Each depth_D.bin contains all units at depth D from the corpus root.
+    # Format: [N][unit_ids][comp_0]...[comp_K-1][corpus_ids]
+    # No ancestor columns — depth bins are for visibility/rendering only.
+
+    by_depth: dict[int, list[int]] = defaultdict(list)
+    for uid in positions:
+        d = depth_of.get(uid)
+        if d is not None:
+            by_depth[d].append(uid)
+
+    depth_counts: dict[str, int] = {}
+    max_depth = max(by_depth.keys()) if by_depth else 0
+
+    for d in sorted(by_depth.keys()):
+        uids = sorted(by_depth[d])
+        ids  = np.array(uids, dtype=np.int32)
+        cids = np.array([corpus_id_of.get(u, 0) for u in uids], dtype=np.int32)
+
+        cols = [(ids, "int32")]
+        for k in range(n_components):
+            col = np.array([float(positions[u][k]) for u in uids], dtype=np.float32)
+            cols.append((col, "float32"))
+        cols.append((cids, "int32"))
+
+        bin_path = method_dir / f"depth_{d}.bin"
+        _write_columnar_bin(bin_path, cols)
+        depth_counts[str(d)] = len(uids)
+        print(f"  depth_{d}.bin   {len(uids):,} points")
+
+    # ── Labels + manifest ─────────────────────────────────────────────────────
+
     labels_path = method_dir / "unit_labels.json"
     with open(labels_path, "w") as f:
         json.dump({str(k): v for k, v in unit_labels.items()}, f)
@@ -361,6 +398,9 @@ def write_method_output(
         "max_height":       max_height,
         "heights":          sorted(by_height.keys()),
         "point_counts":     point_counts,
+        "max_depth":        max_depth,
+        "depths":           sorted(by_depth.keys()),
+        "depth_counts":     depth_counts,
         "n_components":     n_components,
         **manifest_extra,
     }

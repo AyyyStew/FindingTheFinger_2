@@ -15,8 +15,17 @@
  *     [comp_0:f32×N] … [comp_{K-1}:f32×N]
  *     [corpusIds:i32×N]
  *
+ *   depth_D.bin (all depths, no ancestor columns):
+ *     [N:uint32] [unitIds:i32×N]
+ *     [comp_0:f32×N] … [comp_{K-1}:f32×N]
+ *     [corpusIds:i32×N]
+ *
  * Standard methods (UMAP, PHATE, Isomap): K=2 → comp_0=x, comp_1=y.
  * PCA: K=n_components (all retained PCs). Frontend picks any two to display.
+ *
+ * Depth bins group units by distance-from-root so cross-corpus siblings
+ * at the same depth (e.g. Bible books and Raga top-level units) can be
+ * toggled together, unlike height bins which group by distance-from-leaf.
  */
 
 const BASE_URL = '/static/dimreduction';
@@ -47,6 +56,10 @@ interface BaseManifest {
   point_counts:     Record<string, number>;
   /** Number of component columns stored per unit. 2 for standard methods; K for PCA. */
   n_components:     number;
+  /** Depth = distance from corpus root. depth_D.bin groups units at this depth. */
+  max_depth:        number;
+  depths:           number[];
+  depth_counts:     Record<string, number>;
 }
 
 export interface UmapManifest extends BaseManifest {
@@ -139,11 +152,34 @@ export interface PcaParentLayerData {
 
 export type PcaHeightLayerData = PcaLeafLayerData | PcaParentLayerData;
 
+/**
+ * Depth layer — units grouped by depth (distance from corpus root).
+ * Same format for all depths; no ancestor columns.
+ * Standard methods: positions interleaved [x0,y0,x1,y1,…].
+ */
+export interface DepthLayerData {
+  depth: number;
+  count: number;
+  unitIds: Int32Array;
+  positions: Float32Array;
+  corpusIds: Int32Array;
+}
+
+/** PCA depth layer — raw components, pick any two for positions. */
+export interface PcaDepthLayerData {
+  depth: number;
+  count: number;
+  unitIds: Int32Array;
+  components: Float32Array[];
+  corpusIds: Int32Array;
+}
+
 // ── Run data types ────────────────────────────────────────────────────────────
 
 export interface StandardRunData {
   manifest: UmapManifest | PhateManifest | IsomapManifest;
   layers: Map<number, HeightLayerData>;
+  depthLayers: Map<number, DepthLayerData>;
   unitLabels: Record<string, string>;
   bounds: { minX: number; maxX: number; minY: number; maxY: number };
 }
@@ -151,6 +187,7 @@ export interface StandardRunData {
 export interface PcaRunData {
   manifest: PcaManifest;
   layers: Map<number, PcaHeightLayerData>;
+  depthLayers: Map<number, PcaDepthLayerData>;
   unitLabels: Record<string, string>;
 }
 
@@ -218,9 +255,21 @@ export function resolvePcaData(
     }
   }
 
+  const depthLayers = new Map<number, DepthLayerData>();
+  for (const [depth, pcaDepthLayer] of raw.depthLayers) {
+    depthLayers.set(depth, {
+      depth,
+      count: pcaDepthLayer.count,
+      unitIds: pcaDepthLayer.unitIds,
+      positions: buildPcaPositions(pcaDepthLayer, xPc, yPc),
+      corpusIds: pcaDepthLayer.corpusIds,
+    });
+  }
+
   return {
     manifest: raw.manifest as unknown as UmapManifest,  // shape-compatible for LayerPanel
     layers,
+    depthLayers,
     unitLabels: raw.unitLabels,
     bounds: computeBounds(layers),
   };
@@ -263,6 +312,18 @@ export async function fetchHeightBin(
   if (!res.ok) throw new Error(`Failed to load ${method}/height_${height}.bin (${res.status})`);
   const buffer = await res.arrayBuffer();
   return parseHeightBin(buffer, height, manifest);
+}
+
+export async function fetchDepthBin(
+  runId: string,
+  method: ProjectionMethod,
+  depth: number,
+  manifest: ProjectionManifest,
+): Promise<DepthLayerData | PcaDepthLayerData> {
+  const res = await fetch(`${BASE_URL}/${runId}/${method}/depth_${depth}.bin`);
+  if (!res.ok) throw new Error(`Failed to load ${method}/depth_${depth}.bin (${res.status})`);
+  const buffer = await res.arrayBuffer();
+  return parseDepthBin(buffer, depth, manifest);
 }
 
 // ── Binary parser ─────────────────────────────────────────────────────────────
@@ -341,6 +402,52 @@ function parseHeightBin(
   }
 
   return { height, count: N, unitIds, positions, corpusIds } as ParentLayerData;
+}
+
+/**
+ * Parse a depth_D.bin buffer.
+ * Format: [N][unitIds][comp_0]…[comp_K-1][corpusIds]
+ * No ancestor columns — simpler than height bins.
+ */
+function parseDepthBin(
+  buffer: ArrayBuffer,
+  depth: number,
+  manifest: ProjectionManifest,
+): DepthLayerData | PcaDepthLayerData {
+  const N = new DataView(buffer).getUint32(0, true);
+  let byteOffset = 4;
+
+  const readI32 = (n: number): Int32Array => {
+    const arr = new Int32Array(buffer, byteOffset, n);
+    byteOffset += n * 4;
+    return arr;
+  };
+  const readF32 = (n: number): Float32Array => {
+    const arr = new Float32Array(buffer, byteOffset, n);
+    byteOffset += n * 4;
+    return arr;
+  };
+
+  const K = manifest.n_components;
+  const isPca = manifest.method === 'pca';
+
+  const unitIds = readI32(N);
+  const compCols: Float32Array[] = [];
+  for (let k = 0; k < K; k++) compCols.push(readF32(N));
+  const corpusIds = readI32(N);
+
+  if (isPca) {
+    return { depth, count: N, unitIds, components: compCols, corpusIds } as PcaDepthLayerData;
+  }
+
+  const x = compCols[0];
+  const y = compCols[1];
+  const positions = new Float32Array(N * 2);
+  for (let i = 0; i < N; i++) {
+    positions[i * 2]     = x[i];
+    positions[i * 2 + 1] = y[i];
+  }
+  return { depth, count: N, unitIds, positions, corpusIds } as DepthLayerData;
 }
 
 // ── Bounds ────────────────────────────────────────────────────────────────────

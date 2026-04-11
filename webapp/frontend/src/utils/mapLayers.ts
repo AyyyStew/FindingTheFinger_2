@@ -10,25 +10,29 @@ import { ScatterplotLayer } from '@deck.gl/layers';
 import type { Layer } from '@deck.gl/core';
 import type { CorpusInfo } from '../api/types';
 import { getTaxonomyColor } from './taxonomyColors';
-import type { HeightLayerData, StandardRunData } from './projectionLoader';
+import type { HeightLayerData, DepthLayerData, StandardRunData } from './projectionLoader';
 
 // ── Visibility state ──────────────────────────────────────────────────────────
 //
 // Designed to extend: add 'cloud', 'voronoi', 'labels' keys without breaking callers.
 
 export interface MapVisibility {
+  /** Whether scatter points are grouped by height-from-leaf or depth-from-root. */
+  scatterMode: 'height' | 'depth';
+  /** height → visible. Leaves (h=0) on by default. */
   scatter: Record<number, boolean>;
+  /** depth → visible. All depths on by default. */
+  scatterDepth: Record<number, boolean>;
   /** corpus_id → visible. Absent key means visible. Empty object = all visible. */
   corpora: Record<number, boolean>;
-  // cloud:   Record<number, boolean>   ← future
-  // voronoi: Record<number, boolean>   ← future
-  // labels:  Record<number, boolean>   ← future
 }
 
-export function defaultVisibility(heights: number[]): MapVisibility {
+export function defaultVisibility(heights: number[], depths: number[]): MapVisibility {
   const scatter: Record<number, boolean> = {};
   for (const h of heights) scatter[h] = h === 0; // leaves on by default
-  return { scatter, corpora: {} };
+  const scatterDepth: Record<number, boolean> = {};
+  for (const d of depths) scatterDepth[d] = true; // all depths on by default
+  return { scatterMode: 'depth', scatter, scatterDepth, corpora: {} };
 }
 
 // ── Color map ─────────────────────────────────────────────────────────────────
@@ -76,7 +80,7 @@ function hslToRgb255(h: number, s: number, l: number): [number, number, number] 
 // ── Color array builder ───────────────────────────────────────────────────────
 
 function buildColorArray(
-  layer: HeightLayerData,
+  layer: { count: number; corpusIds: Int32Array },
   colorMap: CorpusColorMap,
   alpha: number,
   hiddenCorpora: Set<number>,
@@ -141,6 +145,58 @@ export function buildScatterLayers(
     });
 }
 
+// ── Depth scatter layer builder ───────────────────────────────────────────────
+
+/**
+ * One ScatterplotLayer per visible depth level.
+ * Shallower depths (closer to root) get larger radii — they represent
+ * more-aggregated units, mirroring the height-based size logic.
+ */
+export function buildDepthScatterLayers(
+  data: StandardRunData,
+  visibility: MapVisibility,
+  colorMap: CorpusColorMap,
+): Layer[] {
+  const hiddenCorpora = new Set(
+    Object.entries(visibility.corpora)
+      .filter(([, v]) => !v)
+      .map(([k]) => Number(k)),
+  );
+
+  const maxDepth = data.manifest.max_depth;
+
+  return data.manifest.depths
+    .filter(d => visibility.scatterDepth[d] !== false)
+    .map(d => {
+      const layer = data.depthLayers.get(d) as DepthLayerData;
+      if (!layer) return null;
+      // Deepest depth = leaves: small + semi-transparent.
+      // Shallower depths = parents: larger, more opaque.
+      const distFromLeaf = maxDepth - d;
+      const alpha  = distFromLeaf === 0 ? 180 : 230;
+      const radius = distFromLeaf === 0 ? 3   : 4 + distFromLeaf * 3;
+
+      return new ScatterplotLayer({
+        id: `scatter-d${d}`,
+        data: {
+          length: layer.count,
+          attributes: {
+            getPosition: { value: layer.positions, size: 2 },
+            getFillColor: { value: buildColorArray(layer, colorMap, alpha, hiddenCorpora), size: 4 },
+          },
+        },
+        getRadius: radius,
+        radiusUnits: 'pixels',
+        pickable: true,
+        autoHighlight: true,
+        highlightColor: [255, 255, 255, 60],
+        parameters: { depthTest: false },
+        updateTriggers: { getFillColor: [colorMap.size, alpha, visibility.corpora] },
+      });
+    })
+    .filter((l): l is ScatterplotLayer => l !== null);
+}
+
 // ── Future extension points ───────────────────────────────────────────────────
 //
 // export function buildCloudLayers(
@@ -166,8 +222,11 @@ export function buildAllLayers(
   visibility: MapVisibility,
   colorMap: CorpusColorMap,
 ): Layer[] {
+  const scatterLayers = visibility.scatterMode === 'depth'
+    ? buildDepthScatterLayers(data, visibility, colorMap)
+    : buildScatterLayers(data, visibility, colorMap);
   return [
-    ...buildScatterLayers(data, visibility, colorMap),
+    ...scatterLayers,
     // ...buildCloudLayers(data, visibility, colorMap),   // future
     // ...buildVoronoiLayers(data, visibility),           // future
     // ...buildLabelLayers(data, visibility),             // future

@@ -61,7 +61,7 @@ export function Map() {
   const resolvedVisibility = useMemo(() => {
     if (visibility) return visibility;
     if (!resolvedData) return null;
-    return defaultVisibility(resolvedData.manifest.heights);
+    return defaultVisibility(resolvedData.manifest.heights, resolvedData.manifest.depths);
   }, [visibility, resolvedData]);
 
   // Reset visibility when method changes so layer defaults are recalculated.
@@ -81,7 +81,7 @@ export function Map() {
   });
 
   const firstLeafUnitId = useMemo(() => {
-    if (!hover || hover.height === 0 || !resolvedData) return null;
+    if (!hover || hover.height <= 0 || !resolvedData) return null;
     const leafLayer = resolvedData.layers.get(0);
     if (!leafLayer || leafLayer.height !== 0) return null;
     const leaf = leafLayer as LeafLayerData;

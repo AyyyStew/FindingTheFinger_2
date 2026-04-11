@@ -1,9 +1,9 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
-import type { CorpusInfo, TaxonomyLabel } from '../../api/types';
-import type { ProjectionManifest } from '../../utils/projectionLoader';
-import type { MapVisibility } from '../../utils/mapLayers';
-import { getTaxonomyColor } from '../../utils/taxonomyColors';
-import styles from './LayerPanel.module.css';
+import { useState, useMemo, useEffect, useRef } from "react";
+import type { CorpusInfo, TaxonomyLabel } from "../../api/types";
+import type { ProjectionManifest } from "../../utils/projectionLoader";
+import type { MapVisibility } from "../../utils/mapLayers";
+import { getTaxonomyColor } from "../../utils/taxonomyColors";
+import styles from "./LayerPanel.module.css";
 
 interface LayerPanelProps {
   manifest: ProjectionManifest;
@@ -22,19 +22,52 @@ interface TraditionGroup {
   subGroups: SubGroup[];
 }
 
-function heightDisplayName(height: number, corpora: CorpusInfo[]): string {
+function depthDisplayName(
+  height: number,
+  maxHeight: number,
+  corpora: CorpusInfo[],
+): string {
+  const depth = maxHeight - height;
   const names = new Set<string>();
   for (const corpus of corpora) {
-    const level = corpus.levels.find(l => l.height === height);
+    const level = corpus.levels.find((l) => l.height === height);
     if (level) names.add(level.name);
   }
-  if (names.size === 0) return `h${height}`;
-  return [...names].slice(0, 3).join(' / ');
+  if (names.size === 0) return `d${depth}`;
+  return [...names].slice(0, 3).join(" / ");
 }
 
-export function LayerPanel({ manifest, corpora, visibility, onChange }: LayerPanelProps) {
-  const [expandedTraditions, setExpandedTraditions] = useState<Set<number>>(new Set());
-  const [expandedSubGroups, setExpandedSubGroups] = useState<Set<number>>(new Set());
+/**
+ * Label for a depth-indexed row. Each corpus has its own max height,
+ * so depth d corresponds to height (corpusMaxHeight - d) per corpus.
+ * Collects the level names that land at that height across corpora.
+ */
+function depthRowLabel(depth: number, corpora: CorpusInfo[]): string {
+  const names = new Set<string>();
+  for (const corpus of corpora) {
+    if (corpus.levels.length === 0) continue;
+    const corpusMaxHeight = Math.max(...corpus.levels.map((l) => l.height));
+    const targetHeight = corpusMaxHeight - depth;
+    if (targetHeight < 0) continue;
+    const level = corpus.levels.find((l) => l.height === targetHeight);
+    if (level) names.add(level.name);
+  }
+  if (names.size === 0) return `d${depth}`;
+  return [...names].slice(0, 4).join(" / ");
+}
+
+export function LayerPanel({
+  manifest,
+  corpora,
+  visibility,
+  onChange,
+}: LayerPanelProps) {
+  const [expandedTraditions, setExpandedTraditions] = useState<Set<number>>(
+    new Set(),
+  );
+  const [expandedSubGroups, setExpandedSubGroups] = useState<Set<number>>(
+    new Set(),
+  );
   const initializedRef = useRef(false);
 
   // Expand both levels by default once corpora load.
@@ -44,22 +77,31 @@ export function LayerPanel({ manifest, corpora, visibility, onChange }: LayerPan
     const tIds = new Set<number>();
     const sIds = new Set<number>();
     for (const corpus of corpora) {
-      const root = corpus.taxonomy.find(t => t.level === 0);
-      const sub  = corpus.taxonomy.find(t => t.level === 1);
+      const root = corpus.taxonomy.find((t) => t.level === 0);
+      const sub = corpus.taxonomy.find((t) => t.level === 1);
       if (root) tIds.add(root.id);
-      if (sub)  sIds.add(sub.id);
+      if (sub) sIds.add(sub.id);
     }
     setExpandedTraditions(tIds);
     setExpandedSubGroups(sIds);
   }, [corpora]);
 
-  // ── Height (scatter) toggles ──────────────────────────────────────────────
+  // ── Scatter mode + toggles ────────────────────────────────────────────────
 
+  const mode = visibility.scatterMode;
+
+  const setMode = (next: "depth" | "height") =>
+    onChange({ ...visibility, scatterMode: next });
+
+  // Height-mode toggles
   const toggleScatter = (height: number) =>
-    onChange({ ...visibility, scatter: { ...visibility.scatter, [height]: !visibility.scatter[height] } });
+    onChange({
+      ...visibility,
+      scatter: { ...visibility.scatter, [height]: !visibility.scatter[height] },
+    });
 
-  const allScatterOn  = manifest.heights.every(h => visibility.scatter[h]);
-  const allScatterOff = manifest.heights.every(h => !visibility.scatter[h]);
+  const allScatterOn = manifest.heights.every((h) => visibility.scatter[h]);
+  const allScatterOff = manifest.heights.every((h) => !visibility.scatter[h]);
 
   const toggleAllScatter = () => {
     const next = allScatterOn ? false : true;
@@ -68,17 +110,47 @@ export function LayerPanel({ manifest, corpora, visibility, onChange }: LayerPan
     onChange({ ...visibility, scatter });
   };
 
+  // Depth-mode toggles
+  const toggleScatterDepth = (depth: number) =>
+    onChange({
+      ...visibility,
+      scatterDepth: {
+        ...visibility.scatterDepth,
+        [depth]: !visibility.scatterDepth[depth],
+      },
+    });
+
+  const allDepthOn = manifest.depths.every(
+    (d) => visibility.scatterDepth[d] !== false,
+  );
+  const allDepthOff = manifest.depths.every((d) => !visibility.scatterDepth[d]);
+
+  const toggleAllDepth = () => {
+    const next = allDepthOn ? false : true;
+    const scatterDepth: Record<number, boolean> = {};
+    for (const d of manifest.depths) scatterDepth[d] = next;
+    onChange({ ...visibility, scatterDepth });
+  };
+
   // ── Two-level tradition grouping ──────────────────────────────────────────
 
   const traditionGroups = useMemo<TraditionGroup[]>(() => {
-    const rootMap = new Map<number, { root: TaxonomyLabel; subs: Map<number, { node: TaxonomyLabel; corpora: CorpusInfo[] }> }>();
+    const rootMap = new Map<
+      number,
+      {
+        root: TaxonomyLabel;
+        subs: Map<number, { node: TaxonomyLabel; corpora: CorpusInfo[] }>;
+      }
+    >();
     for (const corpus of corpora) {
-      const root = corpus.taxonomy.find(t => t.level === 0);
-      const sub  = corpus.taxonomy.find(t => t.level === 1);
+      const root = corpus.taxonomy.find((t) => t.level === 0);
+      const sub = corpus.taxonomy.find((t) => t.level === 1);
       if (!root || !sub) continue;
-      if (!rootMap.has(root.id)) rootMap.set(root.id, { root, subs: new Map() });
+      if (!rootMap.has(root.id))
+        rootMap.set(root.id, { root, subs: new Map() });
       const rootEntry = rootMap.get(root.id)!;
-      if (!rootEntry.subs.has(sub.id)) rootEntry.subs.set(sub.id, { node: sub, corpora: [] });
+      if (!rootEntry.subs.has(sub.id))
+        rootEntry.subs.set(sub.id, { node: sub, corpora: [] });
       rootEntry.subs.get(sub.id)!.corpora.push(corpus);
     }
     return [...rootMap.values()]
@@ -97,7 +169,7 @@ export function LayerPanel({ manifest, corpora, visibility, onChange }: LayerPan
   // ── Corpus visibility helpers ─────────────────────────────────────────────
 
   const isCorpusVisible = (id: number) => visibility.corpora[id] !== false;
-  const anyHidden = corpora.some(c => visibility.corpora[c.id] === false);
+  const anyHidden = corpora.some((c) => visibility.corpora[c.id] === false);
 
   const setCorpora = (next: Record<number, boolean>) =>
     onChange({ ...visibility, corpora: next });
@@ -108,17 +180,19 @@ export function LayerPanel({ manifest, corpora, visibility, onChange }: LayerPan
     setCorpora({ ...visibility.corpora, [id]: !isCorpusVisible(id) });
 
   const toggleGroup = (groupCorpora: CorpusInfo[]) => {
-    const allVis = groupCorpora.every(c => isCorpusVisible(c.id));
+    const allVis = groupCorpora.every((c) => isCorpusVisible(c.id));
     const next = { ...visibility.corpora };
     for (const c of groupCorpora) next[c.id] = !allVis;
     setCorpora(next);
   };
 
   const soloGroup = (groupCorpora: CorpusInfo[]) => {
-    const groupIds = new Set(groupCorpora.map(c => c.id));
+    const groupIds = new Set(groupCorpora.map((c) => c.id));
     const isSolo =
-      groupCorpora.every(c => isCorpusVisible(c.id)) &&
-      corpora.filter(c => !groupIds.has(c.id)).every(c => !isCorpusVisible(c.id));
+      groupCorpora.every((c) => isCorpusVisible(c.id)) &&
+      corpora
+        .filter((c) => !groupIds.has(c.id))
+        .every((c) => !isCorpusVisible(c.id));
     if (isSolo) {
       showAllCorpora();
     } else {
@@ -131,7 +205,7 @@ export function LayerPanel({ manifest, corpora, visibility, onChange }: LayerPan
   const soloCorpus = (id: number) => {
     const isSolo =
       isCorpusVisible(id) &&
-      corpora.filter(c => c.id !== id).every(c => !isCorpusVisible(c.id));
+      corpora.filter((c) => c.id !== id).every((c) => !isCorpusVisible(c.id));
     if (isSolo) {
       showAllCorpora();
     } else {
@@ -141,7 +215,11 @@ export function LayerPanel({ manifest, corpora, visibility, onChange }: LayerPan
     }
   };
 
-  const toggleExpand = (set: Set<number>, id: number, setter: (s: Set<number>) => void) => {
+  const toggleExpand = (
+    set: Set<number>,
+    id: number,
+    setter: (s: Set<number>) => void,
+  ) => {
     const next = new Set(set);
     next.has(id) ? next.delete(id) : next.add(id);
     setter(next);
@@ -153,30 +231,88 @@ export function LayerPanel({ manifest, corpora, visibility, onChange }: LayerPan
     <aside className={styles.panel}>
       <h2 className={styles.title}>Layers</h2>
 
-      {/* ── Scatter / height section ── */}
+      {/* ── Points section ── */}
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <span className={styles.sectionLabel}>Points</span>
-          <button className={styles.bulkToggle} onClick={toggleAllScatter}>
-            {allScatterOn ? 'hide all' : allScatterOff ? 'show all' : 'toggle all'}
+          <button
+            className={styles.bulkToggle}
+            onClick={mode === "depth" ? toggleAllDepth : toggleAllScatter}
+          >
+            {(mode === "depth" ? allDepthOn : allScatterOn)
+              ? "hide all"
+              : (mode === "depth" ? allDepthOff : allScatterOff)
+                ? "show all"
+                : "toggle all"}
           </button>
         </div>
-        <ul className={styles.list}>
-          {[...manifest.heights].reverse().map(h => {
-            const visible = visibility.scatter[h] ?? false;
-            const count   = manifest.point_counts[String(h)] ?? 0;
-            const label   = heightDisplayName(h, corpora);
-            return (
-              <li key={h} className={styles.item}>
-                <label className={styles.row}>
-                  <input type="checkbox" className={styles.check} checked={visible} onChange={() => toggleScatter(h)} />
-                  <span className={styles.heightLabel} title={label}>{label}</span>
-                  <span className={styles.count}>{count.toLocaleString()}</span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
+
+        {/* Mode toggle */}
+        <div className={styles.modeToggle}>
+          <button
+            className={`${styles.modeBtn} ${mode === "depth" ? styles.modeBtnActive : ""}`}
+            onClick={() => setMode("depth")}
+          >
+            by depth
+          </button>
+          <button
+            className={`${styles.modeBtn} ${mode === "height" ? styles.modeBtnActive : ""}`}
+            onClick={() => setMode("height")}
+          >
+            by height
+          </button>
+        </div>
+
+        {mode === "height" ? (
+          <ul className={styles.list}>
+            {[...manifest.heights].reverse().map((h) => {
+              const visible = visibility.scatter[h] ?? false;
+              const count = manifest.point_counts[String(h)] ?? 0;
+              const label = depthDisplayName(h, manifest.max_height, corpora);
+              return (
+                <li key={h} className={styles.item}>
+                  <label className={styles.row}>
+                    <input
+                      type="checkbox"
+                      className={styles.check}
+                      checked={visible}
+                      onChange={() => toggleScatter(h)}
+                    />
+                    <span className={styles.heightLabel} title={label}>
+                      {label}
+                    </span>
+                    <span className={styles.count}>
+                      {count.toLocaleString()}
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <ul className={styles.list}>
+            {[...manifest.depths].map((d) => {
+              const visible = visibility.scatterDepth[d] !== false;
+              const count = manifest.depth_counts[String(d)] ?? 0;
+              return (
+                <li key={d} className={styles.item}>
+                  <label className={styles.row}>
+                    <input
+                      type="checkbox"
+                      className={styles.check}
+                      checked={visible}
+                      onChange={() => toggleScatterDepth(d)}
+                    />
+                    <span className={styles.heightLabel} title={depthRowLabel(d, corpora)}>{depthRowLabel(d, corpora)}</span>
+                    <span className={styles.count}>
+                      {count.toLocaleString()}
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       {/* ── Traditions section ── */}
@@ -184,111 +320,175 @@ export function LayerPanel({ manifest, corpora, visibility, onChange }: LayerPan
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <span className={styles.sectionLabel}>Traditions</span>
-            {anyHidden && <button className={styles.bulkToggle} onClick={showAllCorpora}>show all</button>}
+            {anyHidden && (
+              <button className={styles.bulkToggle} onClick={showAllCorpora}>
+                show all
+              </button>
+            )}
           </div>
 
           <div className={styles.traditionList}>
-            {traditionGroups.map(tg => {
-              const { solid } = getTaxonomyColor(tg.subGroups[0]?.corpora[0]?.taxonomy ?? []);
-              const tgCorpora = tg.subGroups.flatMap(sg => sg.corpora);
-              const tAllVis   = tgCorpora.every(c => isCorpusVisible(c.id));
-              const tNoneVis  = tgCorpora.every(c => !isCorpusVisible(c.id));
+            {traditionGroups.map((tg) => {
+              const { solid } = getTaxonomyColor(
+                tg.subGroups[0]?.corpora[0]?.taxonomy ?? [],
+              );
+              const tgCorpora = tg.subGroups.flatMap((sg) => sg.corpora);
+              const tAllVis = tgCorpora.every((c) => isCorpusVisible(c.id));
+              const tNoneVis = tgCorpora.every((c) => !isCorpusVisible(c.id));
               const tExpanded = expandedTraditions.has(tg.root.id);
 
-              const tgIds   = new Set(tgCorpora.map(c => c.id));
-              const tSoloed = tAllVis && corpora.filter(c => !tgIds.has(c.id)).every(c => !isCorpusVisible(c.id));
+              const tgIds = new Set(tgCorpora.map((c) => c.id));
+              const tSoloed =
+                tAllVis &&
+                corpora
+                  .filter((c) => !tgIds.has(c.id))
+                  .every((c) => !isCorpusVisible(c.id));
 
               return (
                 <div key={tg.root.id} className={styles.traditionBlock}>
                   {/* Level-0 row */}
                   <div className={styles.traditionRow}>
-                    <span className={styles.traditionDot} style={{ background: solid }} />
+                    <span
+                      className={styles.traditionDot}
+                      style={{ background: solid }}
+                    />
                     <label className={styles.groupLabel}>
                       <input
                         type="checkbox"
                         className={styles.check}
                         checked={tAllVis}
-                        ref={el => { if (el) el.indeterminate = !tAllVis && !tNoneVis; }}
+                        ref={(el) => {
+                          if (el) el.indeterminate = !tAllVis && !tNoneVis;
+                        }}
                         onChange={() => toggleGroup(tgCorpora)}
                       />
-                      <span className={styles.groupName} title={tg.root.name}>{tg.root.name}</span>
+                      <span className={styles.groupName} title={tg.root.name}>
+                        {tg.root.name}
+                      </span>
                     </label>
                     <button
-                      className={`${styles.soloBtn} ${tSoloed ? styles.soloBtnActive : ''}`}
+                      className={`${styles.soloBtn} ${tSoloed ? styles.soloBtnActive : ""}`}
                       onClick={() => soloGroup(tgCorpora)}
-                    >solo</button>
+                    >
+                      solo
+                    </button>
                     <button
                       className={styles.expandBtn}
-                      onClick={() => toggleExpand(expandedTraditions, tg.root.id, setExpandedTraditions)}
+                      onClick={() =>
+                        toggleExpand(
+                          expandedTraditions,
+                          tg.root.id,
+                          setExpandedTraditions,
+                        )
+                      }
                     >
-                      {tExpanded ? '▾' : '▸'}
+                      {tExpanded ? "▾" : "▸"}
                     </button>
                   </div>
 
                   {/* Level-1 sub-groups */}
-                  {tExpanded && tg.subGroups.map(sg => {
-                    const sgAllVis  = sg.corpora.every(c => isCorpusVisible(c.id));
-                    const sgNoneVis = sg.corpora.every(c => !isCorpusVisible(c.id));
-                    const sgExpanded = expandedSubGroups.has(sg.node.id);
+                  {tExpanded &&
+                    tg.subGroups.map((sg) => {
+                      const sgAllVis = sg.corpora.every((c) =>
+                        isCorpusVisible(c.id),
+                      );
+                      const sgNoneVis = sg.corpora.every(
+                        (c) => !isCorpusVisible(c.id),
+                      );
+                      const sgExpanded = expandedSubGroups.has(sg.node.id);
 
-                    const sgIds   = new Set(sg.corpora.map(c => c.id));
-                    const sgSoloed = sgAllVis && corpora.filter(c => !sgIds.has(c.id)).every(c => !isCorpusVisible(c.id));
+                      const sgIds = new Set(sg.corpora.map((c) => c.id));
+                      const sgSoloed =
+                        sgAllVis &&
+                        corpora
+                          .filter((c) => !sgIds.has(c.id))
+                          .every((c) => !isCorpusVisible(c.id));
 
-                    return (
-                      <div key={sg.node.id} className={styles.subGroupBlock}>
-                        {/* Level-1 row */}
-                        <div className={styles.subGroupRow}>
-                          <label className={styles.groupLabel}>
-                            <input
-                              type="checkbox"
-                              className={styles.check}
-                              checked={sgAllVis}
-                              ref={el => { if (el) el.indeterminate = !sgAllVis && !sgNoneVis; }}
-                              onChange={() => toggleGroup(sg.corpora)}
-                            />
-                            <span className={styles.groupName} title={sg.node.name}>{sg.node.name}</span>
-                          </label>
-                          <button
-                            className={`${styles.soloBtn} ${sgSoloed ? styles.soloBtnActive : ''}`}
-                            onClick={() => soloGroup(sg.corpora)}
-                          >solo</button>
-                          <button
-                            className={styles.expandBtn}
-                            onClick={() => toggleExpand(expandedSubGroups, sg.node.id, setExpandedSubGroups)}
-                          >
-                            {sgExpanded ? '▾' : '▸'}
-                          </button>
+                      return (
+                        <div key={sg.node.id} className={styles.subGroupBlock}>
+                          {/* Level-1 row */}
+                          <div className={styles.subGroupRow}>
+                            <label className={styles.groupLabel}>
+                              <input
+                                type="checkbox"
+                                className={styles.check}
+                                checked={sgAllVis}
+                                ref={(el) => {
+                                  if (el)
+                                    el.indeterminate = !sgAllVis && !sgNoneVis;
+                                }}
+                                onChange={() => toggleGroup(sg.corpora)}
+                              />
+                              <span
+                                className={styles.groupName}
+                                title={sg.node.name}
+                              >
+                                {sg.node.name}
+                              </span>
+                            </label>
+                            <button
+                              className={`${styles.soloBtn} ${sgSoloed ? styles.soloBtnActive : ""}`}
+                              onClick={() => soloGroup(sg.corpora)}
+                            >
+                              solo
+                            </button>
+                            <button
+                              className={styles.expandBtn}
+                              onClick={() =>
+                                toggleExpand(
+                                  expandedSubGroups,
+                                  sg.node.id,
+                                  setExpandedSubGroups,
+                                )
+                              }
+                            >
+                              {sgExpanded ? "▾" : "▸"}
+                            </button>
+                          </div>
+
+                          {/* Corpora */}
+                          {sgExpanded && (
+                            <ul className={styles.corpusList}>
+                              {sg.corpora.map((corpus) => {
+                                const visible = isCorpusVisible(corpus.id);
+                                const cSoloed =
+                                  visible &&
+                                  corpora
+                                    .filter((c) => c.id !== corpus.id)
+                                    .every((c) => !isCorpusVisible(c.id));
+                                return (
+                                  <li
+                                    key={corpus.id}
+                                    className={styles.corpusItem}
+                                  >
+                                    <label className={styles.corpusRow}>
+                                      <input
+                                        type="checkbox"
+                                        className={styles.check}
+                                        checked={visible}
+                                        onChange={() => toggleCorpus(corpus.id)}
+                                      />
+                                      <span
+                                        className={styles.corpusName}
+                                        title={corpus.name}
+                                      >
+                                        {corpus.name}
+                                      </span>
+                                    </label>
+                                    <button
+                                      className={`${styles.soloBtn} ${cSoloed ? styles.soloBtnActive : ""}`}
+                                      onClick={() => soloCorpus(corpus.id)}
+                                    >
+                                      solo
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
                         </div>
-
-                        {/* Corpora */}
-                        {sgExpanded && (
-                          <ul className={styles.corpusList}>
-                            {sg.corpora.map(corpus => {
-                              const visible = isCorpusVisible(corpus.id);
-                              const cSoloed = visible && corpora.filter(c => c.id !== corpus.id).every(c => !isCorpusVisible(c.id));
-                              return (
-                                <li key={corpus.id} className={styles.corpusItem}>
-                                  <label className={styles.corpusRow}>
-                                    <input
-                                      type="checkbox"
-                                      className={styles.check}
-                                      checked={visible}
-                                      onChange={() => toggleCorpus(corpus.id)}
-                                    />
-                                    <span className={styles.corpusName} title={corpus.name}>{corpus.name}</span>
-                                  </label>
-                                  <button
-                                    className={`${styles.soloBtn} ${cSoloed ? styles.soloBtnActive : ''}`}
-                                    onClick={() => soloCorpus(corpus.id)}
-                                  >solo</button>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
                 </div>
               );
             })}

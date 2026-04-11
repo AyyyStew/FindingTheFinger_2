@@ -12,7 +12,10 @@ import styles from './MapCanvas.module.css';
 
 export interface HoverInfo {
   unitId: number;
+  /** Height of the hovered layer (-1 when in depth mode). */
   height: number;
+  /** Depth of the hovered layer (-1 when in height mode). */
+  depth: number;
   corpusId: number;
   screenX: number;
   screenY: number;
@@ -55,21 +58,38 @@ export function MapCanvas({ data, visibility, colorMap, onHover }: MapCanvasProp
         onHover(null);
         return;
       }
-      // Layer id encodes height: "scatter-h0", "scatter-h1", …
-      const heightMatch = info.layer?.id.match(/scatter-h(\d+)/);
-      if (!heightMatch) { onHover(null); return; }
 
-      const height = parseInt(heightMatch[1], 10);
-      const layer = data.layers.get(height);
-      if (!layer) { onHover(null); return; }
+      const layerId = info.layer?.id ?? '';
+      const heightMatch = layerId.match(/^scatter-h(\d+)$/);
+      const depthMatch  = layerId.match(/^scatter-d(\d+)$/);
 
-      onHover({
-        unitId:   layer.unitIds[info.index],
-        height,
-        corpusId: layer.corpusIds[info.index],
-        screenX:  info.x,
-        screenY:  info.y,
-      });
+      if (heightMatch) {
+        const height = parseInt(heightMatch[1], 10);
+        const layer = data.layers.get(height);
+        if (!layer) { onHover(null); return; }
+        onHover({
+          unitId:   layer.unitIds[info.index],
+          height,
+          depth:    -1,
+          corpusId: layer.corpusIds[info.index],
+          screenX:  info.x,
+          screenY:  info.y,
+        });
+      } else if (depthMatch) {
+        const depth = parseInt(depthMatch[1], 10);
+        const layer = data.depthLayers.get(depth);
+        if (!layer) { onHover(null); return; }
+        onHover({
+          unitId:   layer.unitIds[info.index],
+          height:   -1,
+          depth,
+          corpusId: layer.corpusIds[info.index],
+          screenX:  info.x,
+          screenY:  info.y,
+        });
+      } else {
+        onHover(null);
+      }
     },
     [data, onHover],
   );
