@@ -1,0 +1,165 @@
+/**
+ * mapLayers.ts
+ *
+ * Builds deck.gl layer arrays from loaded UMAP data.
+ * Structured for extension: cloud, voronoi, and label layer builders
+ * follow the same pattern and slot into buildAllLayers().
+ */
+
+import { ScatterplotLayer } from '@deck.gl/layers';
+import type { Layer } from '@deck.gl/core';
+import type { CorpusInfo } from '../api/types';
+import { getTaxonomyColor } from './taxonomyColors';
+import type { HeightLayerData, UmapRunData } from './umapLoader';
+
+// ── Visibility state ──────────────────────────────────────────────────────────
+//
+// Designed to extend: add 'cloud', 'voronoi', 'labels' keys without breaking callers.
+
+export interface MapVisibility {
+  scatter: Record<number, boolean>;
+  // cloud:   Record<number, boolean>   ← future
+  // voronoi: Record<number, boolean>   ← future
+  // labels:  Record<number, boolean>   ← future
+}
+
+export function defaultVisibility(heights: number[]): MapVisibility {
+  const scatter: Record<number, boolean> = {};
+  for (const h of heights) scatter[h] = h === 0; // leaves on by default
+  return { scatter };
+}
+
+// ── Color map ─────────────────────────────────────────────────────────────────
+
+/** Maps corpus_id → RGBA tuple [0-255]. */
+export type CorpusColorMap = Map<number, [number, number, number]>;
+
+export function buildCorpusColorMap(corpora: CorpusInfo[]): CorpusColorMap {
+  const map: CorpusColorMap = new Map();
+  for (const corpus of corpora) {
+    const { solid } = getTaxonomyColor(corpus.taxonomy);
+    map.set(corpus.id, hslStringToRgb(solid));
+  }
+  return map;
+}
+
+function hslStringToRgb(hsl: string): [number, number, number] {
+  // Parses "hsl(H, S%, L%)" from taxonomyColors.ts
+  const m = hsl.match(/hsl\(([\d.]+),\s*([\d.]+)%,\s*([\d.]+)%\)/);
+  if (!m) return [140, 140, 140];
+  const h = parseFloat(m[1]);
+  const s = parseFloat(m[2]) / 100;
+  const l = parseFloat(m[3]) / 100;
+  return hslToRgb255(h, s, l);
+}
+
+function hslToRgb255(h: number, s: number, l: number): [number, number, number] {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if      (h < 60)  { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else              { r = c; g = 0; b = x; }
+  return [
+    Math.round((r + m) * 255),
+    Math.round((g + m) * 255),
+    Math.round((b + m) * 255),
+  ];
+}
+
+// ── Color array builder ───────────────────────────────────────────────────────
+
+function buildColorArray(
+  layer: HeightLayerData,
+  colorMap: CorpusColorMap,
+  alpha: number,
+): Uint8Array {
+  const arr = new Uint8Array(layer.count * 4);
+  const fallback: [number, number, number] = [110, 110, 110];
+  for (let i = 0; i < layer.count; i++) {
+    const [r, g, b] = colorMap.get(layer.corpusIds[i]) ?? fallback;
+    arr[i * 4]     = r;
+    arr[i * 4 + 1] = g;
+    arr[i * 4 + 2] = b;
+    arr[i * 4 + 3] = alpha;
+  }
+  return arr;
+}
+
+// ── Scatter layer builder ─────────────────────────────────────────────────────
+
+/**
+ * One ScatterplotLayer per visible height level.
+ * Higher heights get larger radii so they remain visible behind leaves.
+ */
+export function buildScatterLayers(
+  data: UmapRunData,
+  visibility: MapVisibility,
+  colorMap: CorpusColorMap,
+): Layer[] {
+  return data.manifest.heights
+    .filter(h => visibility.scatter[h] !== false)
+    .map(h => {
+      const layer = data.layers.get(h)!;
+      // Leaves: small + semi-transparent so density is visible.
+      // Parents: larger, more opaque — rendered on top via layer order.
+      const alpha  = h === 0 ? 180 : 230;
+      const radius = h === 0 ? 3   : 4 + h * 3;
+
+      return new ScatterplotLayer({
+        id: `scatter-h${h}`,
+        // deck.gl v8 binary attribute API: typed arrays go in data.attributes
+        data: {
+          length: layer.count,
+          attributes: {
+            getPosition: { value: layer.positions, size: 2 },
+            getFillColor: { value: buildColorArray(layer, colorMap, alpha), size: 4 },
+          },
+        },
+        getRadius: radius,
+        radiusUnits: 'pixels',
+        pickable: true,
+        autoHighlight: true,
+        highlightColor: [255, 255, 255, 60],
+        parameters: { depthTest: false },
+        updateTriggers: { getFillColor: [colorMap.size, alpha] },
+      });
+    });
+}
+
+// ── Future extension points ───────────────────────────────────────────────────
+//
+// export function buildCloudLayers(
+//   data: UmapRunData,
+//   visibility: MapVisibility,
+//   colorMap: CorpusColorMap,
+// ): Layer[] { ... }
+//
+// export function buildVoronoiLayers(
+//   data: UmapRunData,
+//   visibility: MapVisibility,
+// ): Layer[] { ... }
+//
+// export function buildLabelLayers(
+//   data: UmapRunData,
+//   visibility: MapVisibility,
+// ): Layer[] { ... }
+
+// ── Master builder ────────────────────────────────────────────────────────────
+
+export function buildAllLayers(
+  data: UmapRunData,
+  visibility: MapVisibility,
+  colorMap: CorpusColorMap,
+): Layer[] {
+  return [
+    ...buildScatterLayers(data, visibility, colorMap),
+    // ...buildCloudLayers(data, visibility, colorMap),   // future
+    // ...buildVoronoiLayers(data, visibility),           // future
+    // ...buildLabelLayers(data, visibility),             // future
+  ];
+}

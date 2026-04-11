@@ -1,0 +1,88 @@
+/* Full viewport minus the sticky header (52px) */
+.layout {
+  display: flex;
+  height: calc(100vh - 52px);
+  overflow: hidden;
+}
+
+/* ── Canvas area ── */
+.canvasWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+/* ── Right sidebar placeholder ── */
+.rightPanel {
+  width: 280px;
+  flex-shrink: 0;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border-subtle);
+  padding: var(--space-4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.rightPlaceholder {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-4);
+}
+
+/* ── Loading / error states ── */
+.centred {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 52px);
+}
+
+.loadingText {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  letter-spacing: 0.03em;
+}
+
+.errorText {
+  font-size: var(--text-sm);
+  color: var(--color-error);
+}
+
+/* ── Hover tooltip ── */
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  z-index: var(--z-tooltip);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 220px;
+}
+
+.tooltipLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tooltipCorpus {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+
+.tooltipHeight {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
