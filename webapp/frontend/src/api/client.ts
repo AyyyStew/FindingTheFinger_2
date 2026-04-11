@@ -49,6 +49,10 @@ export function searchUnits(q: string, height?: number, corpusIds?: number[]): P
   return get(`/api/units/search?${params}`)
 }
 
+export function fetchUnit(unitId: number): Promise<UnitBrief> {
+  return get(`/api/units/${unitId}`)
+}
+
 export function getUnitChildren(unitId: number): Promise<UnitChildPreview[]> {
   return get(`/api/units/${unitId}/children`)
 }

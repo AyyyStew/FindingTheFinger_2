@@ -1,5 +1,5 @@
 .panel {
-  width: 200px;
+  width: 240px;
   flex-shrink: 0;
   height: 100%;
   overflow-y: auto;
@@ -54,6 +54,8 @@
   color: var(--color-text-secondary);
 }
 
+/* ── Height (scatter) list ── */
+
 .list {
   list-style: none;
   margin: 0;
@@ -89,6 +91,9 @@
   font-size: var(--text-xs);
   color: var(--color-text-primary);
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .count {
@@ -96,6 +101,174 @@
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Tradition list ── */
+
+.traditionList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* ── Shared expand button ── */
+
+.expandBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  width: 14px;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  text-align: center;
+}
+
+/* ── Shared group label (name + checkbox) ── */
+
+.groupLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.groupName {
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Solo button ── */
+
+.soloBtn {
+  background: none;
+  border: none;
+  padding: 1px 3px;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--ease-fast), color var(--ease-fast), background var(--ease-fast);
+}
+
+.traditionRow:hover .soloBtn,
+.subGroupRow:hover .soloBtn,
+.corpusItem:hover .soloBtn {
+  opacity: 1;
+}
+
+.soloBtnActive {
+  opacity: 1 !important;
+  color: var(--color-accent);
+  background: var(--color-accent-dim);
+}
+
+/* ── Level 0: Tradition rows ── */
+
+.traditionBlock {
+  display: flex;
+  flex-direction: column;
+}
+
+.traditionRow {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px var(--space-1);
+  border-radius: var(--radius-sm);
+  transition: background var(--ease-fast);
+}
+
+.traditionRow:hover {
+  background: var(--color-surface-hover);
+}
+
+.traditionRow .groupName {
+  color: var(--color-text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.traditionDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Level 1: Sub-group rows ── */
+
+.subGroupBlock {
+  display: flex;
+  flex-direction: column;
+  padding-left: 20px;
+}
+
+.subGroupRow {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px var(--space-1);
+  border-radius: var(--radius-sm);
+  transition: background var(--ease-fast);
+}
+
+.subGroupRow:hover {
+  background: var(--color-surface-hover);
+}
+
+.subGroupRow .groupName {
+  color: var(--color-text-secondary);
+}
+
+/* ── Level 2: Corpus rows ── */
+
+.corpusList {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.corpusItem {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-sm);
+  transition: background var(--ease-fast);
+}
+
+.corpusItem:hover {
+  background: var(--color-surface-hover);
+}
+
+.corpusRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.corpusName {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Meta ── */
 
 .meta {
   margin-top: auto;

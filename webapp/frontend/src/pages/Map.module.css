@@ -60,29 +60,93 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-3);
   box-shadow: var(--shadow-md);
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 220px;
+  flex-direction: row;
+  overflow: hidden;
+  max-width: 260px;
 }
 
-.tooltipLabel {
+.tooltipAccent {
+  width: 3px;
+  flex-shrink: 0;
+  background: var(--tx-solid, var(--color-border));
+  opacity: 0.8;
+}
+
+.tooltipContent {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.tooltipRef {
   font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
   color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.tooltipCorpus {
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
-}
-
-.tooltipHeight {
+.tooltipPath {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tooltipBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.tooltipTaxBadge {
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--tx-dim, var(--color-surface-alt));
+  color: var(--tx-solid, var(--color-text-secondary));
+  border: 1px solid var(--tx-solid, var(--color-border));
+  opacity: 0.9;
+}
+
+.tooltipBadge {
+  font-size: 10px;
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
+.tooltipDivider {
+  height: 1px;
+  background: var(--color-border-subtle);
+  margin: 2px 0;
+}
+
+.tooltipLeafRef {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tooltipLeafText {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

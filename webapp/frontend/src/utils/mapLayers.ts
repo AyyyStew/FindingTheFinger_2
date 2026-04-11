@@ -18,6 +18,8 @@ import type { HeightLayerData, UmapRunData } from './umapLoader';
 
 export interface MapVisibility {
   scatter: Record<number, boolean>;
+  /** corpus_id → visible. Absent key means visible. Empty object = all visible. */
+  corpora: Record<number, boolean>;
   // cloud:   Record<number, boolean>   ← future
   // voronoi: Record<number, boolean>   ← future
   // labels:  Record<number, boolean>   ← future
@@ -26,7 +28,7 @@ export interface MapVisibility {
 export function defaultVisibility(heights: number[]): MapVisibility {
   const scatter: Record<number, boolean> = {};
   for (const h of heights) scatter[h] = h === 0; // leaves on by default
-  return { scatter };
+  return { scatter, corpora: {} };
 }
 
 // ── Color map ─────────────────────────────────────────────────────────────────
@@ -77,15 +79,17 @@ function buildColorArray(
   layer: HeightLayerData,
   colorMap: CorpusColorMap,
   alpha: number,
+  hiddenCorpora: Set<number>,
 ): Uint8Array {
   const arr = new Uint8Array(layer.count * 4);
   const fallback: [number, number, number] = [110, 110, 110];
   for (let i = 0; i < layer.count; i++) {
-    const [r, g, b] = colorMap.get(layer.corpusIds[i]) ?? fallback;
+    const corpusId = layer.corpusIds[i];
+    const [r, g, b] = colorMap.get(corpusId) ?? fallback;
     arr[i * 4]     = r;
     arr[i * 4 + 1] = g;
     arr[i * 4 + 2] = b;
-    arr[i * 4 + 3] = alpha;
+    arr[i * 4 + 3] = hiddenCorpora.has(corpusId) ? 0 : alpha;
   }
   return arr;
 }
@@ -101,6 +105,12 @@ export function buildScatterLayers(
   visibility: MapVisibility,
   colorMap: CorpusColorMap,
 ): Layer[] {
+  const hiddenCorpora = new Set(
+    Object.entries(visibility.corpora)
+      .filter(([, v]) => !v)
+      .map(([k]) => Number(k)),
+  );
+
   return data.manifest.heights
     .filter(h => visibility.scatter[h] !== false)
     .map(h => {
@@ -117,7 +127,7 @@ export function buildScatterLayers(
           length: layer.count,
           attributes: {
             getPosition: { value: layer.positions, size: 2 },
-            getFillColor: { value: buildColorArray(layer, colorMap, alpha), size: 4 },
+            getFillColor: { value: buildColorArray(layer, colorMap, alpha, hiddenCorpora), size: 4 },
           },
         },
         getRadius: radius,
@@ -126,7 +136,7 @@ export function buildScatterLayers(
         autoHighlight: true,
         highlightColor: [255, 255, 255, 60],
         parameters: { depthTest: false },
-        updateTriggers: { getFillColor: [colorMap.size, alpha] },
+        updateTriggers: { getFillColor: [colorMap.size, alpha, visibility.corpora] },
       });
     });
 }
