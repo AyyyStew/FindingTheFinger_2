@@ -123,7 +123,7 @@
 
 /* Verse text */
 .text {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: var(--text-lg);
   line-height: var(--leading-relaxed);
   color: var(--color-text-secondary);

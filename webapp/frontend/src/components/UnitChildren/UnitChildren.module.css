@@ -61,13 +61,14 @@
 }
 
 .verseLabel {
+  font-family: var(--font-serif);
   font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
   color: var(--tx-solid, var(--color-text-muted));
 }
 
 .verseText {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: var(--text-base);
   color: var(--color-text-secondary);
   line-height: var(--leading-relaxed);

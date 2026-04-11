@@ -37,6 +37,12 @@ const ROOT_COLORS: Array<{ keywords: string[]; hsl: HSL }> = [
 
 const FALLBACK: HSL = { h: 0, s: 0, l: 43 };
 
+// ── Tuning knobs ─────────────────────────────────────────────────────────────
+const L1_HUE_RANGE = 45; // modulo divisor → max raw shift before centering
+const L1_HUE_CENTER = 30; // subtract to center: range becomes -(CENTER)..(RANGE-1-CENTER)
+const L2_LIGHT_RANGE = 4; // modulo divisor → max raw lightness shift
+const L2_LIGHT_CENTER = 25; // subtract to center
+
 // Simple deterministic hash of a string → 0..65535
 function nameHash(name: string): number {
   let h = 0;
@@ -83,7 +89,7 @@ export function getTaxonomyColor(
   const l1 = sorted.find((t) => t.level === 1);
   if (l1) {
     const h1 = nameHash(l1.name);
-    const shift = (h1 % 31) - 35; // -15..+15
+    const shift = (h1 % L1_HUE_RANGE) - L1_HUE_CENTER;
     hsl = { ...hsl, h: (hsl.h + shift + 360) % 360 };
   }
 
@@ -91,7 +97,7 @@ export function getTaxonomyColor(
   const l2 = sorted.find((t) => t.level === 2);
   if (l2) {
     const h2 = nameHash(l2.name);
-    const shift = (h2 % 25) - 12; // -12..+12
+    const shift = (h2 % L2_LIGHT_RANGE) - L2_LIGHT_CENTER;
     hsl = { ...hsl, l: Math.max(22, Math.min(72, hsl.l + shift)) };
   }
 
