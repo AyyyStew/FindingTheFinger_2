@@ -10,7 +10,7 @@ import { ScatterplotLayer } from '@deck.gl/layers';
 import type { Layer } from '@deck.gl/core';
 import type { CorpusInfo } from '../api/types';
 import { getTaxonomyColor } from './taxonomyColors';
-import type { HeightLayerData, UmapRunData } from './umapLoader';
+import type { HeightLayerData, StandardRunData } from './projectionLoader';
 
 // ── Visibility state ──────────────────────────────────────────────────────────
 //
@@ -101,7 +101,7 @@ function buildColorArray(
  * Higher heights get larger radii so they remain visible behind leaves.
  */
 export function buildScatterLayers(
-  data: UmapRunData,
+  data: StandardRunData,
   visibility: MapVisibility,
   colorMap: CorpusColorMap,
 ): Layer[] {
@@ -162,7 +162,7 @@ export function buildScatterLayers(
 // ── Master builder ────────────────────────────────────────────────────────────
 
 export function buildAllLayers(
-  data: UmapRunData,
+  data: StandardRunData,
   visibility: MapVisibility,
   colorMap: CorpusColorMap,
 ): Layer[] {

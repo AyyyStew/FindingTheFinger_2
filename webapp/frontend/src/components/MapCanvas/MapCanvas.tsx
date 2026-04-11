@@ -2,7 +2,7 @@ import { useMemo, useCallback } from 'react';
 import DeckGL from '@deck.gl/react';
 import { OrthographicView } from '@deck.gl/core';
 import type { PickingInfo } from '@deck.gl/core';
-import type { UmapRunData } from '../../utils/umapLoader';
+import type { StandardRunData } from '../../utils/projectionLoader';
 import {
   buildAllLayers,
   type MapVisibility,
@@ -19,13 +19,13 @@ export interface HoverInfo {
 }
 
 interface MapCanvasProps {
-  data: UmapRunData;
+  data: StandardRunData;
   visibility: MapVisibility;
   colorMap: CorpusColorMap;
   onHover: (info: HoverInfo | null) => void;
 }
 
-function computeInitialViewState(bounds: UmapRunData['bounds']) {
+function computeInitialViewState(bounds: StandardRunData['bounds']) {
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
   const rangeX = bounds.maxX - bounds.minX;

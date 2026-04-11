@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import type { CorpusInfo, TaxonomyLabel } from '../../api/types';
-import type { UmapManifest } from '../../utils/umapLoader';
+import type { ProjectionManifest } from '../../utils/projectionLoader';
 import type { MapVisibility } from '../../utils/mapLayers';
 import { getTaxonomyColor } from '../../utils/taxonomyColors';
 import styles from './LayerPanel.module.css';
 
 interface LayerPanelProps {
-  manifest: UmapManifest;
+  manifest: ProjectionManifest;
   corpora: CorpusInfo[];
   visibility: MapVisibility;
   onChange: (next: MapVisibility) => void;
