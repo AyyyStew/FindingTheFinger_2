@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import type { UnitBrief } from '../../api/types'
+import type { CorpusInfo, UnitBrief } from '../../api/types'
 import { PassagePicker } from '../PassagePicker/PassagePicker'
 import styles from './SearchBar.module.css'
 
@@ -16,6 +16,8 @@ interface Props {
   onFiltersToggle: () => void
   onSearch: () => void
   isSearching: boolean
+  corpora: CorpusInfo[]
+  selectedCorpusIds: number[]
 }
 
 const MODES: { value: SearchMode; label: string }[] = [
@@ -35,6 +37,8 @@ export function SearchBar({
   onFiltersToggle,
   onSearch,
   isSearching,
+  corpora,
+  selectedCorpusIds,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -80,7 +84,12 @@ export function SearchBar({
 
       <div className={styles.inputWrap}>
         {mode === 'passage' ? (
-          <PassagePicker selected={selectedUnit} onSelect={onSelectedUnitChange} />
+          <PassagePicker
+              selected={selectedUnit}
+              onSelect={onSelectedUnitChange}
+              corpora={corpora}
+              selectedCorpusIds={selectedCorpusIds}
+            />
         ) : (
           <textarea
             ref={textareaRef}

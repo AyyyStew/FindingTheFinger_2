@@ -38,9 +38,13 @@ export function fetchMethods(): Promise<MethodInfo[]> {
   return get('/api/methods')
 }
 
-export function searchUnits(q: string, height = 0, corpusId?: number): Promise<UnitBrief[]> {
-  const params = new URLSearchParams({ q, height: String(height) })
-  if (corpusId != null) params.set('corpus_id', String(corpusId))
+/** height omitted = search all heights */
+export function searchUnits(q: string, height?: number, corpusIds?: number[]): Promise<UnitBrief[]> {
+  const params = new URLSearchParams({ q })
+  if (height != null) params.set('height', String(height))
+  if (corpusIds && corpusIds.length > 0) {
+    corpusIds.forEach((id) => params.append('corpus_id', String(id)))
+  }
   return get(`/api/units/search?${params}`)
 }
 

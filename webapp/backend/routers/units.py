@@ -25,27 +25,29 @@ def _row_to_brief(unit: Unit, corpus_name: str, version_name: str | None) -> Uni
 @router.get("/search", response_model=list[UnitBrief])
 def search_units(
     q: str = Query(..., min_length=1),
-    height: int = Query(0),
-    corpus_id: int | None = Query(None),
+    height: int | None = Query(None),   # None = search all heights
+    corpus_id: list[int] = Query(default=[]),
     limit: int = Query(50, le=200),
     db: Session = Depends(get_db),
 ):
-    """Passage picker autocomplete — fuzzy match on reference_label and text."""
+    """Passage picker autocomplete — fuzzy match on reference_label, text, and corpus name."""
     stmt = (
         select(Unit, Corpus.name, CorpusVersion.translation_name)
         .join(Corpus, Corpus.id == Unit.corpus_id)
         .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
-        .where(Unit.height == height)
         .where(
             or_(
                 Unit.reference_label.ilike(f"%{q}%"),
                 Unit.text.ilike(f"%{q}%"),
+                Corpus.name.ilike(f"%{q}%"),
             )
         )
     )
-    if corpus_id is not None:
-        stmt = stmt.where(Unit.corpus_id == corpus_id)
-    stmt = stmt.limit(limit)
+    if height is not None:
+        stmt = stmt.where(Unit.height == height)
+    if corpus_id:
+        stmt = stmt.where(Unit.corpus_id.in_(corpus_id))
+    stmt = stmt.order_by(Unit.height, Unit.id).limit(limit)
 
     rows = db.execute(stmt).all()
     return [_row_to_brief(unit, corpus_name, version_name) for unit, corpus_name, version_name in rows]

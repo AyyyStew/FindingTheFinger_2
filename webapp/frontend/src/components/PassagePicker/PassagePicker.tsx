@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { searchUnits } from '../../api/client'
-import type { UnitBrief } from '../../api/types'
+import type { CorpusInfo, UnitBrief } from '../../api/types'
 import { useDebounce } from '../../hooks/useDebounce'
 import styles from './PassagePicker.module.css'
 
 interface Props {
   selected: UnitBrief | null
   onSelect: (unit: UnitBrief | null) => void
+  corpora: CorpusInfo[]
+  selectedCorpusIds: number[]
 }
 
-export function PassagePicker({ selected, onSelect }: Props) {
+export function PassagePicker({ selected, onSelect, selectedCorpusIds }: Props) {
   const [inputValue, setInputValue] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -19,20 +21,25 @@ export function PassagePicker({ selected, onSelect }: Props) {
 
   const debouncedQuery = useDebounce(inputValue, 300)
 
+  // Search across all heights — user picks whatever level they want as source
   const { data: units = [] } = useQuery({
-    queryKey: ['passage-search', debouncedQuery],
-    queryFn: () => searchUnits(debouncedQuery, 0),
+    queryKey: ['passage-search', debouncedQuery, selectedCorpusIds],
+    queryFn: () =>
+      searchUnits(
+        debouncedQuery,
+        undefined, // no height filter
+        selectedCorpusIds.length > 0 ? selectedCorpusIds : undefined,
+      ),
     enabled: debouncedQuery.length >= 2,
     staleTime: 30_000,
   })
 
-  // Group results by corpus
+  // Group by corpus
   const grouped = units.reduce<Record<string, UnitBrief[]>>((acc, u) => {
     ;(acc[u.corpus_name] ??= []).push(u)
     return acc
   }, {})
 
-  // Flat list for keyboard nav
   const flatItems = Object.values(grouped).flat()
 
   // Close on outside click
@@ -46,7 +53,6 @@ export function PassagePicker({ selected, onSelect }: Props) {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Reset active index when results change
   useEffect(() => setActiveIndex(-1), [units])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,10 +98,18 @@ export function PassagePicker({ selected, onSelect }: Props) {
             {selected.corpus_version_name && (
               <span className={styles.selectedCorpus}>· {selected.corpus_version_name}</span>
             )}
+            {selected.height != null && (
+              <span className={styles.selectedHeight}>h{selected.height}</span>
+            )}
           </div>
-          <div className={styles.selectedLabel}>{selected.reference_label ?? `Unit ${selected.id}`}</div>
+          <div className={styles.selectedLabel}>
+            {selected.reference_label ?? `Unit ${selected.id}`}
+          </div>
           {selected.text && (
-            <p className={styles.selectedText}>{selected.text.slice(0, 200)}{selected.text.length > 200 ? '…' : ''}</p>
+            <p className={styles.selectedText}>
+              {selected.text.slice(0, 200)}
+              {selected.text.length > 200 ? '…' : ''}
+            </p>
           )}
         </div>
         <button className={styles.clearBtn} onClick={handleClear} aria-label="Clear selection">
@@ -114,7 +128,7 @@ export function PassagePicker({ selected, onSelect }: Props) {
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         onFocus={() => inputValue.length >= 2 && setIsOpen(true)}
-        placeholder="Search for a passage (e.g. John 3, love thy neighbour…)"
+        placeholder="Search for a passage, chapter, or book…"
         autoComplete="off"
         aria-autocomplete="list"
         aria-expanded={isOpen}
@@ -125,7 +139,7 @@ export function PassagePicker({ selected, onSelect }: Props) {
           {debouncedQuery.length < 2 ? (
             <p className={styles.dropdownHint}>Type at least 2 characters…</p>
           ) : flatItems.length === 0 ? (
-            <p className={styles.dropdownEmpty}>No passages found for "{debouncedQuery}"</p>
+            <p className={styles.dropdownEmpty}>No results for "{debouncedQuery}"</p>
           ) : (
             <div className={styles.list}>
               {Object.entries(grouped).map(([corpusName, items]) => {
@@ -147,6 +161,9 @@ export function PassagePicker({ selected, onSelect }: Props) {
                         >
                           <span className={styles.itemLabel}>
                             {unit.reference_label ?? `Unit ${unit.id}`}
+                            {unit.height != null && (
+                              <span className={styles.itemHeight}> h{unit.height}</span>
+                            )}
                           </span>
                           {path && path !== corpusName && (
                             <span className={styles.itemPath}>{path}</span>

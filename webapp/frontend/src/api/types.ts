@@ -4,11 +4,24 @@ export interface CorpusVersionInfo {
   language: string | null
 }
 
+export interface TaxonomyLabel {
+  id: number
+  name: string
+  level: number
+  parent_id: number | null
+}
+
+export interface CorpusLevelInfo {
+  height: number
+  name: string
+}
+
 export interface CorpusInfo {
   id: number
   name: string
   description: string | null
-  taxonomy: string[]
+  taxonomy: TaxonomyLabel[]
+  levels: CorpusLevelInfo[]
   versions: CorpusVersionInfo[]
 }
 
@@ -40,6 +53,7 @@ export interface SearchResult {
   corpus_version_name: string | null
   height: number | null
   score: number
+  taxonomy: TaxonomyLabel[]
 }
 
 export interface SearchResponse {
@@ -50,23 +64,24 @@ export interface SearchResponse {
 export interface SemanticSearchRequest {
   query: string
   method_id?: number
-  height?: number
-  corpus_id?: number
+  height_min?: number
+  height_max?: number
+  corpus_ids?: number[]
   limit?: number
 }
 
 export interface KeywordSearchRequest {
   query: string
-  height?: number
-  corpus_id?: number
+  corpus_ids?: number[]
   limit?: number
 }
 
 export interface PassageSearchRequest {
   unit_id: number
   method_id?: number
-  height?: number
-  corpus_id?: number
+  height_min?: number
+  height_max?: number
+  corpus_ids?: number[]
   limit?: number
   exclude_self?: boolean
 }

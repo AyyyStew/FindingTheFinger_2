@@ -3,7 +3,7 @@
   width: 100%;
 }
 
-/* Input */
+/* ── Text input ── */
 .input {
   width: 100%;
   padding: var(--space-4);
@@ -20,7 +20,7 @@
   outline: none;
 }
 
-/* Selected state — shown instead of input when a unit is picked */
+/* ── Selected passage display ── */
 .selected {
   display: flex;
   align-items: flex-start;
@@ -51,6 +51,12 @@
   letter-spacing: 0.06em;
 }
 
+.selectedHeight {
+  font-size: var(--text-xs);
+  color: var(--color-text-disabled);
+  font-variant-numeric: tabular-nums;
+}
+
 .selectedLabel {
   font-size: var(--text-base);
   font-weight: var(--weight-medium);
@@ -74,7 +80,7 @@
   justify-content: center;
   border-radius: var(--radius-full);
   color: var(--color-text-muted);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   transition: color var(--ease-fast), background var(--ease-fast);
 }
 
@@ -83,7 +89,7 @@
   background: var(--color-surface-hover);
 }
 
-/* Dropdown */
+/* ── Dropdown ── */
 .dropdown {
   position: absolute;
   top: calc(100% + var(--space-1));
@@ -100,18 +106,12 @@
   flex-direction: column;
 }
 
-.dropdownEmpty {
-  padding: var(--space-6) var(--space-4);
-  text-align: center;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
+.dropdownEmpty,
 .dropdownHint {
-  padding: var(--space-4);
+  padding: var(--space-5) var(--space-4);
+  text-align: center;
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-  text-align: center;
 }
 
 .list {
@@ -119,7 +119,7 @@
   flex: 1;
 }
 
-/* Groups */
+/* ── Result groups ── */
 .group {
   padding: var(--space-2) 0;
 }
@@ -159,6 +159,12 @@
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   color: var(--color-text-primary);
+}
+
+.itemHeight {
+  font-size: var(--text-xs);
+  color: var(--color-text-disabled);
+  font-weight: var(--weight-normal);
 }
 
 .itemPath {

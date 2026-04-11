@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   fetchCorpora,
@@ -12,7 +12,7 @@ import { ResultCard } from '../components/ResultCard/ResultCard'
 import { SearchBar, type SearchMode } from '../components/SearchBar/SearchBar'
 import styles from './Home.module.css'
 
-const DEFAULT_FILTERS: Filters = { corpusId: null, height: 0, limit: 10 }
+const DEFAULT_FILTERS: Filters = { corpusIds: [], heightMin: 0, heightMax: 0, limit: 10 }
 
 export function Home() {
   const [mode, setMode] = useState<SearchMode>('semantic')
@@ -23,6 +23,7 @@ export function Home() {
   const [results, setResults] = useState<SearchResponse | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
+  const corporaInitialized = useRef(false)
 
   const { data: corpora = [] } = useQuery({
     queryKey: ['corpora'],
@@ -30,13 +31,28 @@ export function Home() {
     staleTime: Infinity,
   })
 
+  // Auto-select all corpora on first load
+  useEffect(() => {
+    if (corpora.length > 0 && !corporaInitialized.current) {
+      corporaInitialized.current = true
+      setFilters((f) => ({ ...f, corpusIds: corpora.map((c) => c.id) }))
+    }
+  }, [corpora])
+
   const handleSearch = async () => {
     setIsSearching(true)
     setSearchError(null)
 
+    // Skip corpus filter when all are selected (no-op on backend = faster query)
+    const corpus_ids =
+      filters.corpusIds.length === 0 || filters.corpusIds.length === corpora.length
+        ? undefined
+        : filters.corpusIds
+
     const shared = {
-      height: filters.height,
-      corpus_id: filters.corpusId ?? undefined,
+      height_min: filters.heightMin,
+      height_max: filters.heightMax,
+      corpus_ids,
       limit: filters.limit,
     }
 
@@ -46,7 +62,7 @@ export function Home() {
       if (mode === 'semantic') {
         res = await searchSemantic({ query: textQuery, ...shared })
       } else if (mode === 'keyword') {
-        res = await searchKeyword({ query: textQuery, ...shared })
+        res = await searchKeyword({ query: textQuery, corpus_ids, limit: filters.limit })
       } else {
         res = await searchPassage({ unit_id: selectedUnit!.id, ...shared })
       }
@@ -80,6 +96,8 @@ export function Home() {
           onFiltersToggle={() => setFiltersOpen((o) => !o)}
           onSearch={handleSearch}
           isSearching={isSearching}
+          corpora={corpora}
+          selectedCorpusIds={filters.corpusIds}
         />
         <FilterPanel
           open={filtersOpen}

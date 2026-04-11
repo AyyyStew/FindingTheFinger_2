@@ -16,11 +16,24 @@ class CorpusVersionInfo(BaseModel):
     language: str | None
 
 
+class TaxonomyLabel(BaseModel):
+    id: int
+    name: str
+    level: int
+    parent_id: int | None
+
+
+class CorpusLevelInfo(BaseModel):
+    height: int
+    name: str
+
+
 class CorpusInfo(BaseModel):
     id: int
     name: str
     description: str | None
-    taxonomy: list[str]
+    taxonomy: list[TaxonomyLabel]
+    levels: list[CorpusLevelInfo]
     versions: list[CorpusVersionInfo]
 
 
@@ -59,7 +72,8 @@ class SearchResult(BaseModel):
     corpus_name: str
     corpus_version_name: str | None
     height: int | None
-    score: float  # cosine similarity 0-1; always 1.0 for keyword results
+    score: float  # cosine similarity 0–1; always 1.0 for keyword
+    taxonomy: list[TaxonomyLabel]  # full ancestor chain, for color-coding
 
 
 class SearchResponse(BaseModel):
@@ -70,22 +84,23 @@ class SearchResponse(BaseModel):
 class SemanticSearchRequest(BaseModel):
     query: str
     method_id: int | None = None
-    height: int = 0
-    corpus_id: int | None = None
+    height_min: int = 0
+    height_max: int = 0
+    corpus_ids: list[int] | None = None
     limit: int = 10
 
 
 class KeywordSearchRequest(BaseModel):
     query: str
-    height: int = 0
-    corpus_id: int | None = None
+    corpus_ids: list[int] | None = None
     limit: int = 10
 
 
 class PassageSearchRequest(BaseModel):
     unit_id: int
     method_id: int | None = None
-    height: int = 0
-    corpus_id: int | None = None
+    height_min: int = 0
+    height_max: int = 0
+    corpus_ids: list[int] | None = None
     limit: int = 10
     exclude_self: bool = True
