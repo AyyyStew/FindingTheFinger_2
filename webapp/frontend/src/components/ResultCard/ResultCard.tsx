@@ -1,5 +1,6 @@
 import type { SearchResult } from '../../api/types'
 import { getTaxonomyColor } from '../../utils/taxonomyColors'
+import { UnitChildren } from '../UnitChildren/UnitChildren'
 import styles from './ResultCard.module.css'
 
 interface Props {
@@ -51,6 +52,7 @@ export function ResultCard({ result, showScore }: Props) {
         </div>
 
         {text && <p className={styles.text}>{text}</p>}
+        <UnitChildren unitId={result.id} height={result.height} />
       </div>
     </article>
   )
