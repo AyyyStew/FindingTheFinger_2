@@ -95,12 +95,14 @@ class SemanticSearchRequest(BaseModel):
     height_max: int = 0
     corpus_ids: list[int] | None = None
     limit: int = 10
+    offset: int = 0
 
 
 class KeywordSearchRequest(BaseModel):
     query: str
     corpus_ids: list[int] | None = None
     limit: int = 10
+    offset: int = 0
 
 
 class PassageSearchRequest(BaseModel):
@@ -110,4 +112,5 @@ class PassageSearchRequest(BaseModel):
     height_max: int = 0
     corpus_ids: list[int] | None = None
     limit: int = 10
+    offset: int = 0
     exclude_self: bool = True

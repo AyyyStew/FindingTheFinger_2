@@ -22,6 +22,8 @@ export function Home() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [results, setResults] = useState<SearchResponse | null>(null)
   const [isSearching, setIsSearching] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const corporaInitialized = useRef(false)
 
@@ -39,39 +41,69 @@ export function Home() {
     }
   }, [corpora])
 
-  const handleSearch = async () => {
-    setIsSearching(true)
-    setSearchError(null)
-
-    // Skip corpus filter when all are selected (no-op on backend = faster query)
+  const buildShared = (offset = 0) => {
     const corpus_ids =
       filters.corpusIds.length === 0 || filters.corpusIds.length === corpora.length
         ? undefined
         : filters.corpusIds
-
-    const shared = {
+    return {
       height_min: filters.heightMin,
       height_max: filters.heightMax,
       corpus_ids,
       limit: filters.limit,
+      offset,
     }
+  }
+
+  const handleSearch = async () => {
+    setIsSearching(true)
+    setSearchError(null)
+    setHasMore(false)
 
     try {
       let res: SearchResponse
+      const shared = buildShared(0)
 
       if (mode === 'semantic') {
         res = await searchSemantic({ query: textQuery, ...shared })
       } else if (mode === 'keyword') {
-        res = await searchKeyword({ query: textQuery, corpus_ids, limit: filters.limit })
+        res = await searchKeyword({ query: textQuery, corpus_ids: shared.corpus_ids, limit: shared.limit, offset: 0 })
       } else {
         res = await searchPassage({ unit_id: selectedUnit!.id, ...shared })
       }
 
       setResults(res)
+      setHasMore(res.results.length === filters.limit)
     } catch (e) {
       setSearchError(e instanceof Error ? e.message : 'Search failed')
     } finally {
       setIsSearching(false)
+    }
+  }
+
+  const handleLoadMore = async () => {
+    if (!results) return
+    setIsLoadingMore(true)
+
+    try {
+      let res: SearchResponse
+      const offset = results.results.length
+      const shared = buildShared(offset)
+
+      if (results.mode === 'semantic') {
+        res = await searchSemantic({ query: textQuery, ...shared })
+      } else if (results.mode === 'keyword') {
+        res = await searchKeyword({ query: textQuery, corpus_ids: shared.corpus_ids, limit: shared.limit, offset })
+      } else {
+        res = await searchPassage({ unit_id: selectedUnit!.id, ...shared })
+      }
+
+      setResults({ ...res, results: [...results.results, ...res.results] })
+      setHasMore(res.results.length === filters.limit)
+    } catch (e) {
+      setSearchError(e instanceof Error ? e.message : 'Search failed')
+    } finally {
+      setIsLoadingMore(false)
     }
   }
 
@@ -125,6 +157,15 @@ export function Home() {
                   <ResultCard key={r.id} result={r} showScore={showScore} />
                 ))}
               </div>
+              {hasMore && (
+                <button
+                  className={styles.loadMoreButton}
+                  onClick={handleLoadMore}
+                  disabled={isLoadingMore}
+                >
+                  {isLoadingMore ? 'Loading…' : 'Load more'}
+                </button>
+              )}
             </>
           ) : null}
         </section>

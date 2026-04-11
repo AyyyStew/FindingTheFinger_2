@@ -74,12 +74,14 @@ export interface SemanticSearchRequest {
   height_max?: number
   corpus_ids?: number[]
   limit?: number
+  offset?: number
 }
 
 export interface KeywordSearchRequest {
   query: string
   corpus_ids?: number[]
   limit?: number
+  offset?: number
 }
 
 export interface PassageSearchRequest {
@@ -89,5 +91,6 @@ export interface PassageSearchRequest {
   height_max?: number
   corpus_ids?: number[]
   limit?: number
+  offset?: number
   exclude_self?: boolean
 }

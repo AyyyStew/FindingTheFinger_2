@@ -36,6 +36,7 @@ def _vector_search(
     limit: int,
     tax_map: dict[int, list[TaxonomyLabel]],
     exclude_unit_id: int | None = None,
+    offset: int = 0,
 ) -> list[SearchResult]:
     stmt = (
         select(
@@ -54,7 +55,7 @@ def _vector_search(
         stmt = stmt.where(Unit.corpus_id.in_(corpus_ids))
     if exclude_unit_id is not None:
         stmt = stmt.where(Unit.id != exclude_unit_id)
-    stmt = stmt.order_by("distance").limit(limit)
+    stmt = stmt.order_by("distance").offset(offset).limit(limit)
 
     rows = db.execute(stmt).all()
     return [
@@ -79,7 +80,8 @@ def search_semantic(req: SemanticSearchRequest, db: Session = Depends(get_db)):
     query_vec = embed_query(req.query)
     tax_map = build_corpus_taxonomy_map(db)
     results = _vector_search(
-        db, query_vec, method_id, req.height_min, req.height_max, req.corpus_ids, req.limit, tax_map
+        db, query_vec, method_id, req.height_min, req.height_max, req.corpus_ids, req.limit, tax_map,
+        offset=req.offset,
     )
     return SearchResponse(results=results, mode="semantic")
 
@@ -101,7 +103,7 @@ def search_keyword(req: KeywordSearchRequest, db: Session = Depends(get_db)):
     )
     if req.corpus_ids:
         stmt = stmt.where(Unit.corpus_id.in_(req.corpus_ids))
-    stmt = stmt.limit(req.limit)
+    stmt = stmt.offset(req.offset).limit(req.limit)
 
     rows = db.execute(stmt).all()
     return SearchResponse(
@@ -143,6 +145,6 @@ def search_passage(req: PassageSearchRequest, db: Session = Depends(get_db)):
     exclude_id = req.unit_id if req.exclude_self else None
     results = _vector_search(
         db, list(vector), method_id, req.height_min, req.height_max,
-        req.corpus_ids, req.limit, tax_map, exclude_id
+        req.corpus_ids, req.limit, tax_map, exclude_id, offset=req.offset,
     )
     return SearchResponse(results=results, mode="passage")
