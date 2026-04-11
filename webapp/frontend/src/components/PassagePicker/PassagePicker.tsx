@@ -4,7 +4,7 @@ import { searchUnits } from '../../api/client'
 import type { CorpusInfo, UnitBrief } from '../../api/types'
 import { useDebounce } from '../../hooks/useDebounce'
 import { getTaxonomyColor } from '../../utils/taxonomyColors'
-import { UnitChildren } from '../UnitChildren/UnitChildren'
+import { UnitCard } from '../UnitCard/UnitCard'
 import styles from './PassagePicker.module.css'
 
 interface Props {
@@ -89,43 +89,16 @@ export function PassagePicker({ selected, onSelect, selectedCorpusIds }: Props) 
   }
 
   if (selected) {
-    const { solid, dim } = getTaxonomyColor(selected.taxonomy)
-    const taxonomyRoot = selected.taxonomy.find((t) => t.level === 0)
-    const displayPath = selected.ancestor_path ?? selected.corpus_name
-
     return (
-      <div
-        className={styles.selected}
-        style={{ '--tx-solid': solid, '--tx-dim': dim } as React.CSSProperties}
-      >
-        <div className={styles.selectedAccentBar} />
-        <div className={styles.selectedInner}>
-          <div className={styles.selectedHeader}>
-            <div className={styles.selectedTitleGroup}>
-              <h3 className={styles.selectedReference}>
-                {selected.reference_label ?? `Unit ${selected.id}`}
-              </h3>
-              {displayPath && <p className={styles.selectedPath}>{displayPath}</p>}
-            </div>
-            <button className={styles.clearBtn} onClick={handleClear} aria-label="Clear selection">
-              ✕
-            </button>
-          </div>
-          <div className={styles.selectedBadges}>
-            {taxonomyRoot && (
-              <span className={styles.selectedTaxBadge}>{taxonomyRoot.name}</span>
-            )}
-            <span className={styles.selectedBadge}>{selected.corpus_name}</span>
-            {selected.corpus_version_name && (
-              <span className={styles.selectedBadge}>{selected.corpus_version_name}</span>
-            )}
-          </div>
-          {selected.text && (
-            <p className={styles.selectedText}>{selected.text}</p>
-          )}
-          <UnitChildren unitId={selected.id} height={selected.height ?? 0} />
-        </div>
-      </div>
+      <UnitCard
+        unit={selected}
+        variant="compact"
+        actions={
+          <button className={styles.clearBtn} onClick={handleClear} aria-label="Clear selection">
+            ✕
+          </button>
+        }
+      />
     )
   }
 
