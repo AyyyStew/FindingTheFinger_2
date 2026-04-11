@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, select
 
-from db.models import Corpus, CorpusToTaxonomy, CorpusVersion, Embedding, Method, Taxonomy, Unit
+from db.models import Corpus, CorpusVersion, Embedding, Method, Unit
 from ..deps import get_db
 from ..embedder import embed_query
 from ..schemas import (
@@ -13,6 +13,7 @@ from ..schemas import (
     SemanticSearchRequest,
     TaxonomyLabel,
 )
+from ..taxonomy import build_corpus_taxonomy_map
 
 router = APIRouter(prefix="/api/search")
 
@@ -23,32 +24,6 @@ def _default_method_id(db: Session) -> int:
         raise HTTPException(status_code=503, detail="No embedding methods in database")
     return method.id
 
-
-def _build_corpus_taxonomy_map(db: Session) -> dict[int, list[TaxonomyLabel]]:
-    """
-    Two queries: load all taxonomy nodes + all corpus links, then walk parent
-    chains in Python. Returns {corpus_id: [TaxonomyLabel sorted by level]}.
-    """
-    all_tax = {t.id: t for t in db.execute(select(Taxonomy)).scalars().all()}
-    links = db.execute(
-        select(CorpusToTaxonomy.corpus_id, CorpusToTaxonomy.taxonomy_id)
-    ).all()
-
-    result: dict[int, list[TaxonomyLabel]] = {}
-    for corpus_id, tax_id in links:
-        chain_ids: set[int] = set()
-        cur = tax_id
-        while cur is not None and cur in all_tax:
-            chain_ids.add(cur)
-            cur = all_tax[cur].parent_id
-
-        nodes = sorted([all_tax[i] for i in chain_ids], key=lambda t: t.level)
-        result[corpus_id] = [
-            TaxonomyLabel(id=t.id, name=t.name, level=t.level, parent_id=t.parent_id)
-            for t in nodes
-        ]
-
-    return result
 
 
 def _vector_search(
@@ -102,7 +77,7 @@ def _vector_search(
 def search_semantic(req: SemanticSearchRequest, db: Session = Depends(get_db)):
     method_id = req.method_id or _default_method_id(db)
     query_vec = embed_query(req.query)
-    tax_map = _build_corpus_taxonomy_map(db)
+    tax_map = build_corpus_taxonomy_map(db)
     results = _vector_search(
         db, query_vec, method_id, req.height_min, req.height_max, req.corpus_ids, req.limit, tax_map
     )
@@ -111,7 +86,7 @@ def search_semantic(req: SemanticSearchRequest, db: Session = Depends(get_db)):
 
 @router.post("/keyword", response_model=SearchResponse)
 def search_keyword(req: KeywordSearchRequest, db: Session = Depends(get_db)):
-    tax_map = _build_corpus_taxonomy_map(db)
+    tax_map = build_corpus_taxonomy_map(db)
     stmt = (
         select(Unit, Corpus.name, CorpusVersion.translation_name)
         .join(Corpus, Corpus.id == Unit.corpus_id)
@@ -151,7 +126,7 @@ def search_keyword(req: KeywordSearchRequest, db: Session = Depends(get_db)):
 @router.post("/passage", response_model=SearchResponse)
 def search_passage(req: PassageSearchRequest, db: Session = Depends(get_db)):
     method_id = req.method_id or _default_method_id(db)
-    tax_map = _build_corpus_taxonomy_map(db)
+    tax_map = build_corpus_taxonomy_map(db)
 
     vector = db.execute(
         select(Embedding.vector)

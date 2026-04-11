@@ -6,6 +6,7 @@ import type {
   SearchResponse,
   SemanticSearchRequest,
   UnitBrief,
+  UnitChildPreview,
 } from './types'
 
 async function post<T>(path: string, body: unknown): Promise<T> {
@@ -46,6 +47,10 @@ export function searchUnits(q: string, height?: number, corpusIds?: number[]): P
     corpusIds.forEach((id) => params.append('corpus_id', String(id)))
   }
   return get(`/api/units/search?${params}`)
+}
+
+export function getUnitChildren(unitId: number): Promise<UnitChildPreview[]> {
+  return get(`/api/units/${unitId}/children`)
 }
 
 export function searchSemantic(req: SemanticSearchRequest): Promise<SearchResponse> {

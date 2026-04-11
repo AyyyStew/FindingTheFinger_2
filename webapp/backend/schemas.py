@@ -58,6 +58,13 @@ class UnitBrief(BaseModel):
     corpus_version_name: str | None
     height: int | None
     depth: int
+    taxonomy: list[TaxonomyLabel]
+
+
+class UnitChildPreview(UnitBrief):
+    """UnitBrief + first child (for preview) and child count."""
+    first_child: "UnitBrief | None" = None
+    child_count: int = 0
 
 
 # ---------------------------------------------------------------------------

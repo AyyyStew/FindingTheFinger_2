@@ -42,6 +42,12 @@ export interface UnitBrief {
   corpus_version_name: string | null
   height: number | null
   depth: number
+  taxonomy: TaxonomyLabel[]
+}
+
+export interface UnitChildPreview extends UnitBrief {
+  first_child: UnitBrief | null
+  child_count: number
 }
 
 export interface SearchResult {
