@@ -67,7 +67,6 @@ export function Map() {
   // Reset visibility when method changes so layer defaults are recalculated.
   const handleMethodChange = (next: ProjectionMethod) => {
     setMethod(next);
-    setVisibility(null);
     setXPc(0);
     setYPc(1);
   };
