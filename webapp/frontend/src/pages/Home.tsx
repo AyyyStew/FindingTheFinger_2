@@ -26,6 +26,7 @@ export function Home() {
   const [hasMore, setHasMore] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const corporaInitialized = useRef(false)
+  const resultsRef = useRef<HTMLElement>(null)
 
   const { data: corpora = [] } = useQuery({
     queryKey: ['corpora'],
@@ -74,6 +75,26 @@ export function Home() {
 
       setResults(res)
       setHasMore(res.results.length === filters.limit)
+      setTimeout(() => {
+        if (!resultsRef.current) return
+        const target = resultsRef.current.getBoundingClientRect().top + window.scrollY - 72
+        const start = window.scrollY
+        const distance = target - start
+        const duration = 800
+        let startTime: number | null = null
+
+        const ease = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+
+        const step = (timestamp: number) => {
+          if (!startTime) startTime = timestamp
+          const elapsed = timestamp - startTime
+          const progress = Math.min(elapsed / duration, 1)
+          window.scrollTo(0, start + distance * ease(progress))
+          if (progress < 1) requestAnimationFrame(step)
+        }
+
+        requestAnimationFrame(step)
+      }, 200)
     } catch (e) {
       setSearchError(e instanceof Error ? e.message : 'Search failed')
     } finally {
@@ -140,7 +161,7 @@ export function Home() {
       </section>
 
       {(searchError || results) && (
-        <section className={styles.results}>
+        <section ref={resultsRef} className={styles.results}>
           {searchError ? (
             <p className={styles.error}>{searchError}</p>
           ) : results && results.results.length === 0 ? (
