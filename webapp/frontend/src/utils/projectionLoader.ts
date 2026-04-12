@@ -20,8 +20,8 @@
  *     [comp_0:f32×N] … [comp_{K-1}:f32×N]
  *     [corpusIds:i32×N]
  *
- * Standard methods (UMAP, PHATE, Isomap): K=2 → comp_0=x, comp_1=y.
- * PCA: K=n_components (all retained PCs). Frontend picks any two to display.
+ * Standard methods (UMAP, PHATE, Isomap): K>=2; frontend uses xyz when present.
+ * PCA: K=n_components (all retained PCs). Frontend picks any three to display.
  *
  * Depth bins group units by distance-from-root so cross-corpus siblings
  * at the same depth (e.g. Bible books and Raga top-level units) can be
@@ -100,7 +100,7 @@ export type ProjectionManifest =
 
 /**
  * Standard 2D leaf layer (UMAP / PHATE / Isomap).
- * positions is interleaved [x0,y0,x1,y1,…] ready for deck.gl.
+ * positions is interleaved [x0,y0,z0,x1,y1,z1,…] ready for deck.gl.
  */
 export interface LeafLayerData {
   height: 0;
@@ -155,7 +155,7 @@ export type PcaHeightLayerData = PcaLeafLayerData | PcaParentLayerData;
 /**
  * Depth layer — units grouped by depth (distance from corpus root).
  * Same format for all depths; no ancestor columns.
- * Standard methods: positions interleaved [x0,y0,x1,y1,…].
+ * Standard methods: positions interleaved [x0,y0,z0,x1,y1,z1,…].
  */
 export interface DepthLayerData {
   depth: number;
@@ -181,7 +181,7 @@ export interface StandardRunData {
   layers: Map<number, HeightLayerData>;
   depthLayers: Map<number, DepthLayerData>;
   unitLabels: Record<string, string>;
-  bounds: { minX: number; maxX: number; minY: number; maxY: number };
+  bounds: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
 }
 
 export interface PcaRunData {
@@ -200,20 +200,22 @@ export function isPcaRunData(d: ProjectionRunData): d is PcaRunData {
 // ── PCA utilities ─────────────────────────────────────────────────────────────
 
 /**
- * Build an interleaved positions Float32Array from two PC indices (0-indexed).
- * Used by Map.tsx when the user changes the X/Y PC axis selectors.
+ * Build an interleaved positions Float32Array from three PC indices (0-indexed).
+ * Used by Map.tsx when the user changes the X/Y/Z PC axis selectors.
  */
 type PcaProjectionLayerData = PcaHeightLayerData | PcaDepthLayerData;
 
-function buildInterleavedPositions(
+function buildInterleavedPositions3(
   xArr: Float32Array,
   yArr: Float32Array,
+  zArr: Float32Array,
   count: number,
 ): Float32Array {
-  const positions = new Float32Array(count * 2);
+  const positions = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    positions[i * 2]     = xArr[i];
-    positions[i * 2 + 1] = yArr[i];
+    positions[i * 3]     = xArr[i];
+    positions[i * 3 + 1] = yArr[i];
+    positions[i * 3 + 2] = zArr[i];
   }
   return positions;
 }
@@ -222,10 +224,12 @@ export function buildPcaPositions(
   layer: PcaProjectionLayerData,
   xPc: number,
   yPc: number,
+  zPc: number,
 ): Float32Array {
   const xArr = layer.components[xPc];
   const yArr = layer.components[yPc];
-  return buildInterleavedPositions(xArr, yArr, layer.count);
+  const zArr = layer.components[zPc] ?? new Float32Array(layer.count);
+  return buildInterleavedPositions3(xArr, yArr, zArr, layer.count);
 }
 
 /**
@@ -237,11 +241,12 @@ export function resolvePcaData(
   raw: PcaRunData,
   xPc: number,
   yPc: number,
+  zPc: number,
 ): StandardRunData {
   const layers = new Map<number, HeightLayerData>();
 
   for (const [height, pcaLayer] of raw.layers) {
-    const positions = buildPcaPositions(pcaLayer, xPc, yPc);
+    const positions = buildPcaPositions(pcaLayer, xPc, yPc, zPc);
 
     if (height === 0) {
       const leaf = pcaLayer as PcaLeafLayerData;
@@ -271,7 +276,7 @@ export function resolvePcaData(
       depth,
       count: pcaDepthLayer.count,
       unitIds: pcaDepthLayer.unitIds,
-      positions: buildPcaPositions(pcaDepthLayer, xPc, yPc),
+      positions: buildPcaPositions(pcaDepthLayer, xPc, yPc, zPc),
       corpusIds: pcaDepthLayer.corpusIds,
     });
   }
@@ -399,10 +404,12 @@ function parseHeightBin(
     } as PcaParentLayerData;
   }
 
-  // Standard path: interleave comp_0 and comp_1 as positions
+  // Standard path: interleave comp_0, comp_1, comp_2 as positions.
+  // If comp_2 is absent (older runs), use z=0 for a flat view.
   const x = compCols[0];
   const y = compCols[1];
-  const positions = buildInterleavedPositions(x, y, N);
+  const z = compCols[2] ?? new Float32Array(N);
+  const positions = buildInterleavedPositions3(x, y, z, N);
 
   if (height === 0) {
     const corpusSeqs = reader.readI32(N);
@@ -445,7 +452,8 @@ function parseDepthBin(
 
   const x = compCols[0];
   const y = compCols[1];
-  const positions = buildInterleavedPositions(x, y, N);
+  const z = compCols[2] ?? new Float32Array(N);
+  const positions = buildInterleavedPositions3(x, y, z, N);
   return { depth, count: N, unitIds, positions, corpusIds } as DepthLayerData;
 }
 
@@ -453,18 +461,20 @@ function parseDepthBin(
 
 export function computeBounds(
   layers: Map<number, HeightLayerData>,
-): { minX: number; maxX: number; minY: number; maxY: number } {
+): { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number } {
   const leaf = layers.get(0);
-  if (!leaf) return { minX: -1, maxX: 1, minY: -1, maxY: 1 };
+  if (!leaf) return { minX: -1, maxX: 1, minY: -1, maxY: 1, minZ: -1, maxZ: 1 };
 
   const pos = leaf.positions;
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (let i = 0; i < pos.length; i += 2) {
-    const px = pos[i], py = pos[i + 1];
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < pos.length; i += 3) {
+    const px = pos[i], py = pos[i + 1], pz = pos[i + 2];
     if (px < minX) minX = px;
     if (px > maxX) maxX = px;
     if (py < minY) minY = py;
     if (py > maxY) maxY = py;
+    if (pz < minZ) minZ = pz;
+    if (pz > maxZ) maxZ = pz;
   }
-  return { minX, maxX, minY, maxY };
+  return { minX, maxX, minY, maxY, minZ, maxZ };
 }

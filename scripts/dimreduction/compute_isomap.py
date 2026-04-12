@@ -1,7 +1,7 @@
 """
 scripts/dimreduction/compute_isomap.py
 
-Isomap 2D projection. Fits on a balanced sample using sklearn's Isomap,
+Isomap 3D projection. Fits on a balanced sample using sklearn's Isomap,
 transforms all points via kernel approximation. Saves encoder.pkl.
 
 Isomap builds a kNN graph, so fitting is O(n_sample²) — the balanced
@@ -51,13 +51,14 @@ def run_isomap(matrix: np.ndarray, n_neighbors: int,
              else f"all n={len(matrix):,}")
     print(f"\nFitting Isomap  n_neighbors={n_neighbors}  on {label}...")
 
-    iso = Isomap(n_components=2, n_neighbors=n_neighbors, n_jobs=-1)
+    iso = Isomap(n_components=3, n_neighbors=n_neighbors, n_jobs=-1)
     iso.fit(fit_matrix)
 
     print(f"  Fit done. Transforming all {len(matrix):,} points...")
     coords = np.array(iso.transform(matrix), dtype=np.float32)
     print(f"  Done.  x∈[{coords[:,0].min():.3f}, {coords[:,0].max():.3f}]"
-          f"  y∈[{coords[:,1].min():.3f}, {coords[:,1].max():.3f}]")
+          f"  y∈[{coords[:,1].min():.3f}, {coords[:,1].max():.3f}]"
+          f"  z∈[{coords[:,2].min():.3f}, {coords[:,2].max():.3f}]")
     return iso, coords
 
 
@@ -115,7 +116,7 @@ def main(run_id: str | None = None) -> None:
         leaf_ancestors  = leaf_ancestors,
         unit_labels     = unit_labels,
         max_height      = max_height,
-        n_components    = 2,
+        n_components    = 3,
     )
 
     encoder_path = output_dir / run_id / METHOD_NAME / "encoder.pkl"

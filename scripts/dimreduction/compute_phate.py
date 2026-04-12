@@ -1,7 +1,7 @@
 """
 scripts/dimreduction/compute_phate.py
 
-PHATE 2D projection. Fits on a balanced sample, transforms all points.
+PHATE 3D projection. Fits on a balanced sample, transforms all points.
 Saves the fitted operator as encoder.pkl (supports phate_op.transform()).
 
 Requires: pip install phate
@@ -52,7 +52,7 @@ def run_phate(matrix: np.ndarray, knn: int, decay: int,
     print(f"\nFitting PHATE  knn={knn}  decay={decay}  on {label}...")
 
     phate_op = phate.PHATE(
-        n_components=2,
+        n_components=3,
         knn=knn,
         decay=decay,
         n_jobs=-1,
@@ -63,7 +63,8 @@ def run_phate(matrix: np.ndarray, knn: int, decay: int,
     print(f"  Fit done. Transforming all {len(matrix):,} points...")
     coords = np.array(phate_op.transform(matrix), dtype=np.float32)
     print(f"  Done.  x∈[{coords[:,0].min():.3f}, {coords[:,0].max():.3f}]"
-          f"  y∈[{coords[:,1].min():.3f}, {coords[:,1].max():.3f}]")
+          f"  y∈[{coords[:,1].min():.3f}, {coords[:,1].max():.3f}]"
+          f"  z∈[{coords[:,2].min():.3f}, {coords[:,2].max():.3f}]")
     return phate_op, coords
 
 
@@ -122,7 +123,7 @@ def main(run_id: str | None = None) -> None:
         leaf_ancestors  = leaf_ancestors,
         unit_labels     = unit_labels,
         max_height      = max_height,
-        n_components    = 2,
+        n_components    = 3,
     )
 
     encoder_path = output_dir / run_id / METHOD_NAME / "encoder.pkl"

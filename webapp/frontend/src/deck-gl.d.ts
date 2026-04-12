@@ -11,6 +11,9 @@ declare module '@deck.gl/core' {
   export class OrthographicView {
     constructor(props?: Record<string, unknown>);
   }
+  export class OrbitView {
+    constructor(props?: Record<string, unknown>);
+  }
   export interface PickingInfo {
     picked: boolean;
     index: number;

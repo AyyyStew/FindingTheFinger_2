@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { compareUnits, fetchCorpora, fetchUnit } from '../api/client';
 import type { CompareResponse, SearchResult } from '../api/types';
-import { MapCanvas, type HoverInfo, type FlyToTarget } from '../components/MapCanvas/MapCanvas';
+import { MapCanvas, type HoverInfo, type FlyToTarget, type MapViewMode } from '../components/MapCanvas/MapCanvas';
 import { LayerPanel } from '../components/LayerPanel/LayerPanel';
 import { MapSearchPanel, type MapSearchPanelHandle } from '../components/MapSearchPanel/MapSearchPanel';
 import { MapToolsPanel } from '../components/MapToolsPanel/MapToolsPanel';
@@ -55,18 +55,21 @@ function rgbTupleToCss([r, g, b]: [number, number, number]): string {
 }
 
 /** Pan to a point, preserving the current zoom level. */
-function flyToPoint(x: number, y: number): FlyToTarget {
-  return { target: [x, y, 0] };
+function flyToPoint(x: number, y: number, z: number): FlyToTarget {
+  return { target: [x, y, z] };
 }
 
 export function Map() {
   const [method, setMethod] = useState<ProjectionMethod>('umap');
+  const [viewMode, setViewMode] = useState<MapViewMode>('2d');
   const [rightPanelTab, setRightPanelTab] = useState<'search' | 'tools'>('search');
   const [overlays, setOverlays] = useState<MapOverlayOptions>(DEFAULT_OVERLAY_OPTIONS);
+  const [fitToBoundsToken, setFitToBoundsToken] = useState(0);
 
   // PCA axis selection (0-indexed component indices)
   const [xPc, setXPc] = useState(0);
   const [yPc, setYPc] = useState(1);
+  const [zPc, setZPc] = useState(2);
 
   const { data: projData, loading, message, error } = useProjectionData(method);
 
@@ -85,10 +88,10 @@ export function Map() {
   const resolvedData = useMemo<StandardRunData | null>(() => {
     if (!projData) return null;
     if (isPcaRunData(projData)) {
-      return resolvePcaData(projData, xPc, yPc);
+      return resolvePcaData(projData, xPc, yPc, zPc);
     }
     return projData;
-  }, [projData, xPc, yPc]);
+  }, [projData, xPc, yPc, zPc]);
 
   const resolvedVisibility = useMemo(() => {
     if (!resolvedData) return null;
@@ -114,6 +117,7 @@ export function Map() {
     setMethod(next);
     setXPc(0);
     setYPc(1);
+    setZPc(2);
     setHighlightPos(null);
     setSearchResults(null);
     setAnchorUnitId(null);
@@ -181,7 +185,7 @@ export function Map() {
 
   /** Map from unitId → [x, y] built once from all height+depth layers. */
   const unitPositionMap = useMemo(
-    () => resolvedData ? buildUnitPositionMap(resolvedData) : new globalThis.Map<number, [number, number]>(),
+    () => resolvedData ? buildUnitPositionMap(resolvedData) : new globalThis.Map<number, [number, number, number]>(),
     [resolvedData],
   );
 
@@ -220,9 +224,9 @@ export function Map() {
    * Positions for the constellation. Index 0 = hub (anchor for passage mode,
    * top result otherwise). Indices 1..N = result spokes.
    */
-  const resultPositions = useMemo<[number, number][] | null>(() => {
+  const resultPositions = useMemo<[number, number, number][] | null>(() => {
     if (!searchResults || searchResults.length === 0) return null;
-    const positions: [number, number][] = [];
+    const positions: [number, number, number][] = [];
     // Prepend anchor as hub when available (passage search).
     if (anchorUnitId != null) {
       const ap = unitPositionMap.get(anchorUnitId);
@@ -239,7 +243,7 @@ export function Map() {
 
   const compareSelectionSet = useMemo(() => new globalThis.Set(compareSelectionIds), [compareSelectionIds]);
   const compareSelectionPositions = useMemo(() => {
-    const positions: [number, number][] = [];
+    const positions: [number, number, number][] = [];
     for (const unitId of compareSelectionIds) {
       if (unitId === compareHoverUnitId) continue;
       const pos = unitPositionMap.get(unitId);
@@ -270,11 +274,11 @@ export function Map() {
     const flyTarget = anchor ?? results.find(r => unitPositionMap.has(r.id))?.id;
     if (flyTarget != null) {
       const pos = unitPositionMap.get(flyTarget);
-      if (pos) setFlyTo(flyToPoint(pos[0], pos[1]));
+      if (pos) setFlyTo(flyToPoint(pos[0], pos[1], pos[2]));
     }
   }, [unitPositionMap]);
 
-  const [highlightPos, setHighlightPos] = useState<[number, number] | null>(null);
+  const [highlightPos, setHighlightPos] = useState<[number, number, number] | null>(null);
 
   useEffect(() => {
     if (rightPanelTab === 'tools') {
@@ -318,7 +322,7 @@ export function Map() {
     const pos = unitPositionMap.get(result.id);
     if (pos) {
       setHighlightPos(pos);
-      setFlyTo(flyToPoint(pos[0], pos[1]));
+      setFlyTo(flyToPoint(pos[0], pos[1], pos[2]));
     }
   }, [unitPositionMap]);
 
@@ -386,7 +390,7 @@ export function Map() {
 
   const handleZoomToSelection = useCallback((unitId: number) => {
     const pos = unitPositionMap.get(unitId);
-    if (pos) setFlyTo({ target: [pos[0], pos[1], 0], zoom: 8 });
+    if (pos) setFlyTo({ target: [pos[0], pos[1], pos[2]], zoom: 8 });
   }, [unitPositionMap]);
 
   const selectedUnitLabels = useMemo(() => {
@@ -418,6 +422,20 @@ export function Map() {
     return colors;
   }, [colorMap, compareSelectionIds, unitCorpusMap]);
 
+  const pcaManifest = (projData && isPcaRunData(projData))
+    ? projData.manifest as PcaManifest
+    : null;
+
+  const derivedOverlaysAvailable = viewMode === '2d';
+
+  useEffect(() => {
+    if (!pcaManifest) return;
+    const maxIndex = Math.max(0, pcaManifest.n_components - 1);
+    setXPc(prev => Math.min(prev, maxIndex));
+    setYPc(prev => Math.min(prev, maxIndex));
+    setZPc(prev => Math.min(prev, maxIndex));
+  }, [pcaManifest]);
+
   if (error) {
     return (
       <div className={styles.centred}>
@@ -425,10 +443,6 @@ export function Map() {
       </div>
     );
   }
-
-  const pcaManifest = (projData && isPcaRunData(projData))
-    ? projData.manifest as PcaManifest
-    : null;
 
   return (
     <>
@@ -505,6 +519,20 @@ export function Map() {
                   ))}
                 </select>
               </label>
+              <label className={styles.pcaLabel}>
+                Z
+                <select
+                  className={styles.pcaSelect}
+                  value={zPc}
+                  onChange={e => setZPc(Number(e.target.value))}
+                >
+                  {pcaManifest.explained_variance_ratio.map((ev, i) => (
+                    <option key={i} value={i}>
+                      PC{i + 1} ({(ev * 100).toFixed(1)}%)
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           )}
         </div>
@@ -517,10 +545,34 @@ export function Map() {
           ) : (
             <>
               <div className={styles.overlayToolbar} aria-label="Map view overlays">
+                <div className={styles.viewModeGroup} aria-label="Map dimension mode">
+                  <button
+                    type="button"
+                    className={`${styles.overlayBtn} ${viewMode === '2d' ? styles.overlayBtnActive : ''}`}
+                    onClick={() => setViewMode('2d')}
+                  >
+                    2D
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.overlayBtn} ${viewMode === '3d' ? styles.overlayBtnActive : ''}`}
+                    onClick={() => setViewMode('3d')}
+                  >
+                    3D
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className={styles.overlayBtn}
+                  onClick={() => setFitToBoundsToken(t => t + 1)}
+                >
+                  Zoom to fit
+                </button>
                 <button
                   type="button"
                   className={`${styles.overlayBtn} ${overlays.voronoi ? styles.overlayBtnActive : ''}`}
                   onClick={() => toggleOverlay('voronoi')}
+                  disabled={!derivedOverlaysAvailable}
                 >
                   Voronoi
                 </button>
@@ -528,6 +580,7 @@ export function Map() {
                   type="button"
                   className={`${styles.overlayBtn} ${overlays.kde ? styles.overlayBtnActive : ''}`}
                   onClick={() => toggleOverlay('kde')}
+                  disabled={!derivedOverlaysAvailable}
                 >
                   KDE
                 </button>
@@ -535,7 +588,7 @@ export function Map() {
                   className={styles.overlaySelect}
                   value={overlays.kdeBreakdown}
                   onChange={e => setKdeBreakdown(e.target.value as KdeBreakdown)}
-                  disabled={!overlays.kde}
+                  disabled={!derivedOverlaysAvailable || !overlays.kde}
                   aria-label="KDE breakdown"
                 >
                   {Object.entries(KDE_BREAKDOWN_LABELS).map(([value, label]) => (
@@ -546,6 +599,7 @@ export function Map() {
                   type="button"
                   className={`${styles.overlayBtn} ${overlays.labels ? styles.overlayBtnActive : ''}`}
                   onClick={() => toggleOverlay('labels')}
+                  disabled={!derivedOverlaysAvailable}
                 >
                   Labels
                 </button>
@@ -554,7 +608,7 @@ export function Map() {
                     type="button"
                     className={`${styles.overlayBtn} ${overlays.labelCorpus ? styles.overlayBtnActive : ''}`}
                     onClick={toggleCorpusLabels}
-                    disabled={!overlays.labels}
+                    disabled={!derivedOverlaysAvailable || !overlays.labels}
                   >
                     corpus
                   </button>
@@ -564,7 +618,7 @@ export function Map() {
                         type="button"
                         className={`${styles.overlayBtn} ${overlays.labelDepths.includes(depth) ? styles.overlayBtnActive : ''}`}
                         onClick={() => toggleLabelDepth(depth)}
-                        disabled={!overlays.labels}
+                        disabled={!derivedOverlaysAvailable || !overlays.labels}
                       >
                         d{depth}
                       </button>
@@ -579,12 +633,15 @@ export function Map() {
                 </button>
               </div>
               <MapCanvas
-                key={method}
+                key={`${method}-${viewMode}`}
                 data={resolvedData}
                 visibility={resolvedVisibility}
                 colorMap={colorMap}
                 corpusLabelMap={corpusLabelMap}
                 overlays={overlays}
+                viewMode={viewMode}
+                fitToBoundsToken={fitToBoundsToken}
+                enableDerivedOverlays={derivedOverlaysAvailable}
                 onHover={setHover}
                 onClick={handleMapClick}
                 resultPositions={visibleResultPositions}

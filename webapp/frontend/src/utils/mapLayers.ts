@@ -181,7 +181,7 @@ export function buildScatterLayers(
         data: {
           length: layer.count,
           attributes: {
-            getPosition: { value: layer.positions, size: 2 },
+            getPosition: { value: layer.positions, size: 3 },
             getFillColor: { value: fillColors, size: 4 },
             getLineColor: { value: lineColors, size: 4 },
           },
@@ -244,7 +244,7 @@ export function buildDepthScatterLayers(
         data: {
           length: layer.count,
           attributes: {
-            getPosition: { value: layer.positions, size: 2 },
+            getPosition: { value: layer.positions, size: 3 },
             getFillColor: { value: fillColors, size: 4 },
             getLineColor: { value: lineColors, size: 4 },
           },
@@ -270,19 +270,20 @@ export function buildDepthScatterLayers(
  * Subtle gold cue for search result hover / focus.
  */
 export function buildHighlightLayer(
-  positions: [number, number][],
+  positions: [number, number, number][],
   id = 'search-highlight',
   radiusMinPixels = HIGHLIGHT_RADIUS_PX,
   fillAlpha = 175,
 ): Layer | null {
   if (positions.length === 0) return null;
   const count = positions.length;
-  const posArr = new Float32Array(count * 2);
+  const posArr = new Float32Array(count * 3);
   const fillColors = new Uint8Array(count * 4);
   const lineColors = new Uint8Array(count * 4);
   for (let i = 0; i < count; i++) {
-    posArr[i * 2]     = positions[i][0];
-    posArr[i * 2 + 1] = positions[i][1];
+    posArr[i * 3]     = positions[i][0];
+    posArr[i * 3 + 1] = positions[i][1];
+    posArr[i * 3 + 2] = positions[i][2];
     // Dark fill with a gold outline keeps selected points visible on dense scatter.
     fillColors[i * 4]     = 0;
     fillColors[i * 4 + 1] = 0;
@@ -298,7 +299,7 @@ export function buildHighlightLayer(
     data: {
       length: count,
       attributes: {
-        getPosition: { value: posArr, size: 2 },
+        getPosition: { value: posArr, size: 3 },
         getFillColor: { value: fillColors, size: 4 },
         getLineColor: { value: lineColors, size: 4 },
       },
@@ -320,15 +321,15 @@ export function buildHighlightLayer(
  * For passage search: hub = the queried passage.
  * For semantic/keyword: hub = the top result.
  */
-export function buildConstellationLayer(positions: [number, number][]): Layer | null {
+export function buildConstellationLayer(positions: [number, number, number][]): Layer | null {
   if (positions.length < 2) return null;
   const [hub, ...spokes] = positions;
   const lines = spokes.map(pos => ({ from: hub, to: pos }));
   return new LineLayer({
     id: 'search-constellation',
     data: lines,
-    getSourcePosition: (d: { from: [number, number] }) => d.from,
-    getTargetPosition: (d: { to: [number, number] }) => d.to,
+    getSourcePosition: (d: { from: [number, number, number] }) => d.from,
+    getTargetPosition: (d: { to: [number, number, number] }) => d.to,
     getColor: [201, 169, 110, 255],
     getWidth: 1.5,
     widthUnits: 'pixels',
@@ -433,8 +434,8 @@ function pointLayersKey(layers: VisiblePointLayer[]): string {
       layer.count,
       layer.positions[0] ?? 0,
       layer.positions[1] ?? 0,
-      layer.positions[last * 2] ?? 0,
-      layer.positions[last * 2 + 1] ?? 0,
+      layer.positions[last * 3] ?? 0,
+      layer.positions[last * 3 + 1] ?? 0,
     ].join(':');
   }).join('|');
 }
@@ -509,7 +510,7 @@ function visibleLayerPoints(
     points.push({
       unitId,
       corpusId,
-      position: [layer.positions[i * 2], layer.positions[i * 2 + 1]],
+      position: [layer.positions[i * 3], layer.positions[i * 3 + 1]],
     });
   }
   return points;
@@ -832,8 +833,8 @@ export function buildLabelLayers(
           const corpusId = corpusLayer.corpusIds[i];
           if (hiddenCorpora.has(corpusId)) continue;
           const current = corpusCentroids.get(corpusId) ?? { x: 0, y: 0, count: 0 };
-          current.x += corpusLayer.positions[i * 2];
-          current.y += corpusLayer.positions[i * 2 + 1];
+          current.x += corpusLayer.positions[i * 3];
+          current.y += corpusLayer.positions[i * 3 + 1];
           current.count += 1;
           corpusCentroids.set(corpusId, current);
         }
@@ -861,7 +862,7 @@ export function buildLabelLayers(
         if (!text) continue;
         const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
         nextLabels.push({
-          position: [layer.positions[i * 2], layer.positions[i * 2 + 1]],
+          position: [layer.positions[i * 3], layer.positions[i * 3 + 1]],
           text,
           color: [r, g, b, depth === 0 ? 245 : depth === 1 ? 225 : 195],
         });
@@ -901,21 +902,28 @@ export function buildAllLayers(
   corpusLabelMap: CorpusLabelMap,
   selectedUnitIds: Set<number> | null = null,
   overlays: MapOverlayOptions = DEFAULT_OVERLAY_OPTIONS,
+  enableDerivedOverlays = true,
 ): Layer[] {
   const scatterLayers = visibility.scatterMode === 'depth'
     ? buildDepthScatterLayers(data, visibility, colorMap, selectedUnitIds)
     : buildScatterLayers(data, visibility, colorMap, selectedUnitIds);
   return [
-    ...(overlays.kde ? buildKdeCloudLayers(data, visibility, colorMap, overlays.kdeBreakdown) : []),
-    ...(overlays.voronoi ? buildVoronoiLayers(data, visibility, colorMap) : []),
+    ...(enableDerivedOverlays && overlays.kde
+      ? buildKdeCloudLayers(data, visibility, colorMap, overlays.kdeBreakdown)
+      : []),
+    ...(enableDerivedOverlays && overlays.voronoi
+      ? buildVoronoiLayers(data, visibility, colorMap)
+      : []),
     ...(overlays.hidePoints ? [] : scatterLayers),
-    ...(overlays.labels ? buildLabelLayers(
-      data,
-      visibility,
-      colorMap,
-      corpusLabelMap,
-      overlays.labelCorpus,
-      overlays.labelDepths,
-    ) : []),
+    ...(enableDerivedOverlays && overlays.labels
+      ? buildLabelLayers(
+          data,
+          visibility,
+          colorMap,
+          corpusLabelMap,
+          overlays.labelCorpus,
+          overlays.labelDepths,
+        )
+      : []),
   ];
 }

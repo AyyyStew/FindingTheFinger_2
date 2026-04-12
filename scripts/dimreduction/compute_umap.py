@@ -1,7 +1,7 @@
 """
 scripts/dimreduction/compute_umap.py
 
-UMAP 2D projection. Fits on a balanced sample, transforms all points,
+UMAP 3D projection. Fits on a balanced sample, transforms all points,
 aggregates parent positions by mean, writes binary output.
 Also saves the fitted reducer as encoder.pkl for later transform().
 
@@ -57,7 +57,7 @@ def run_umap(matrix: np.ndarray, n_neighbors: int, min_dist: float,
           f"  metric={UMAP_METRIC}  on {label}...")
 
     reducer = umap_lib.UMAP(
-        n_components=2,
+        n_components=3,
         n_neighbors=n_neighbors,
         min_dist=min_dist,
         metric=UMAP_METRIC,
@@ -69,7 +69,8 @@ def run_umap(matrix: np.ndarray, n_neighbors: int, min_dist: float,
     print(f"  Fit done. Transforming all {len(matrix):,} points...")
     coords = np.array(reducer.transform(matrix), dtype=np.float32)
     print(f"  Done.  x∈[{coords[:,0].min():.3f}, {coords[:,0].max():.3f}]"
-          f"  y∈[{coords[:,1].min():.3f}, {coords[:,1].max():.3f}]")
+          f"  y∈[{coords[:,1].min():.3f}, {coords[:,1].max():.3f}]"
+          f"  z∈[{coords[:,2].min():.3f}, {coords[:,2].max():.3f}]")
     return reducer, coords
 
 
@@ -140,7 +141,7 @@ def main(run_id: str | None = None) -> None:
         leaf_ancestors  = leaf_ancestors,
         unit_labels     = unit_labels,
         max_height      = max_height,
-        n_components    = 2,
+        n_components    = 3,
     )
 
     # Save encoder for later transform()

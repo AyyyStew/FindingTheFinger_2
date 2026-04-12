@@ -7,19 +7,19 @@ export interface NullableRange {
   max: number | null;
 }
 
-export function buildUnitPositionMap(data: StandardRunData): globalThis.Map<number, [number, number]> {
-  const map = new globalThis.Map<number, [number, number]>();
+export function buildUnitPositionMap(data: StandardRunData): globalThis.Map<number, [number, number, number]> {
+  const map = new globalThis.Map<number, [number, number, number]>();
   for (const [, layer] of data.layers) {
     const pos = layer.positions;
     for (let i = 0; i < layer.count; i++) {
-      map.set(layer.unitIds[i], [pos[i * 2], pos[i * 2 + 1]]);
+      map.set(layer.unitIds[i], [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]]);
     }
   }
   for (const [, layer] of data.depthLayers) {
     const pos = layer.positions;
     for (let i = 0; i < layer.count; i++) {
       if (!map.has(layer.unitIds[i])) {
-        map.set(layer.unitIds[i], [pos[i * 2], pos[i * 2 + 1]]);
+        map.set(layer.unitIds[i], [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]]);
       }
     }
   }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import DeckGL from '@deck.gl/react';
-import { OrthographicView } from '@deck.gl/core';
+import { OrbitView, OrthographicView } from '@deck.gl/core';
 import type { Layer, PickingInfo } from '@deck.gl/core';
 import type { StandardRunData } from '../../utils/projectionLoader';
 import {
@@ -32,9 +32,13 @@ export interface FlyToTarget {
   zoom?: number;
 }
 
+export type MapViewMode = '2d' | '3d';
+
 interface DeckViewState {
   target: [number, number, number];
   zoom: number;
+  rotationX: number;
+  rotationOrbit: number;
   transitionDuration?: number;
 }
 
@@ -46,30 +50,47 @@ interface MapCanvasProps {
   onHover: (info: HoverInfo | null) => void;
   onClick?: (info: HoverInfo) => void;
   /** Positions (up to 10) of search result units. Index 0 = hub/anchor. */
-  resultPositions?: [number, number][] | null;
+  resultPositions?: [number, number, number][] | null;
   /** Selected comparison unit IDs shown in tools mode. */
   selectedUnitIds?: Set<number> | null;
   /** Selected comparison positions rendered above the scatterplot. */
-  selectedPositions?: [number, number][] | null;
+  selectedPositions?: [number, number, number][] | null;
   /** Selected comparison position currently hovered in the tools table. */
-  selectedHoverPosition?: [number, number] | null;
+  selectedHoverPosition?: [number, number, number] | null;
   /** When set, shows a pulsing highlight ring at this map position (result card hover). */
-  highlightPos?: [number, number] | null;
+  highlightPos?: [number, number, number] | null;
   /** When this changes reference, the map animates to the target position. */
   flyTo?: FlyToTarget | null;
   /** Optional derived views drawn against the current visible point layer(s). */
   overlays?: MapOverlayOptions;
+  /** 2D (orthographic) or 3D (orbit) map camera mode. */
+  viewMode?: MapViewMode;
+  /** Increment to trigger a zoom-to-fit reset. */
+  fitToBoundsToken?: number;
+  /** Whether Voronoi/KDE/labels derived overlays are enabled for this view mode. */
+  enableDerivedOverlays?: boolean;
 }
 
-function computeInitialViewState(bounds: StandardRunData['bounds']): DeckViewState {
+function computeInitialViewState(bounds: StandardRunData['bounds'], viewMode: MapViewMode): DeckViewState {
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
+  if (viewMode === '2d') {
+    const rangeX = bounds.maxX - bounds.minX;
+    const rangeY = bounds.maxY - bounds.minY;
+    const maxRange = Math.max(rangeX, rangeY, 0.1);
+    const viewportSize = Math.min(window.innerWidth, window.innerHeight) * 0.7;
+    const zoom = Math.log2(viewportSize / maxRange);
+    return { target: [cx, cy, 0], zoom, rotationX: 0, rotationOrbit: 0 };
+  }
+
+  const cz = (bounds.minZ + bounds.maxZ) / 2;
   const rangeX = bounds.maxX - bounds.minX;
   const rangeY = bounds.maxY - bounds.minY;
-  const maxRange = Math.max(rangeX, rangeY, 0.1);
+  const rangeZ = bounds.maxZ - bounds.minZ;
+  const maxRange = Math.max(rangeX, rangeY, rangeZ, 0.1);
   const viewportSize = Math.min(window.innerWidth, window.innerHeight) * 0.7;
   const zoom = Math.log2(viewportSize / maxRange);
-  return { target: [cx, cy, 0], zoom };
+  return { target: [cx, cy, cz], zoom, rotationX: 35, rotationOrbit: 20 };
 }
 
 export function MapCanvas({
@@ -86,28 +107,39 @@ export function MapCanvas({
   highlightPos,
   flyTo,
   overlays = DEFAULT_OVERLAY_OPTIONS,
+  viewMode = '2d',
+  fitToBoundsToken = 0,
+  enableDerivedOverlays = true,
 }: MapCanvasProps) {
   const [viewState, setViewState] = useState<DeckViewState>(
-    () => computeInitialViewState(data.bounds),
+    () => computeInitialViewState(data.bounds, viewMode),
   );
 
   const [selectedHoverFillAlpha, setSelectedHoverFillAlpha] = useState(0);
 
   // Refit when the dataset (projection) changes.
   useEffect(() => {
-    setViewState(computeInitialViewState(data.bounds));
-  }, [data]);
+    setViewState(computeInitialViewState(data.bounds, viewMode));
+  }, [data, viewMode]);
+
+  // Explicit zoom-to-fit trigger from parent controls.
+  useEffect(() => {
+    setViewState(computeInitialViewState(data.bounds, viewMode));
+  }, [fitToBoundsToken, data.bounds, viewMode]);
 
   // Pan (and optionally zoom) when flyTo changes.
   useEffect(() => {
     if (!flyTo) return;
+    const target: [number, number, number] = viewMode === '3d'
+      ? flyTo.target
+      : [flyTo.target[0], flyTo.target[1], 0];
     setViewState(prev => ({
       ...prev,
-      target: flyTo.target,
+      target,
       ...(flyTo.zoom != null ? { zoom: flyTo.zoom } : {}),
       transitionDuration: 250,
     }));
-  }, [flyTo]);
+  }, [flyTo, viewMode]);
 
   useEffect(() => {
     if (!selectedHoverPosition) {
@@ -131,15 +163,32 @@ export function MapCanvas({
     ({ viewState: vs }: { viewState: object }) => {
       const { transitionDuration: _td, ...rest } = vs as DeckViewState & { transitionDuration?: number };
       void _td;
-      setViewState(rest as DeckViewState);
+      const next = rest as DeckViewState;
+      if (viewMode === '2d') {
+        setViewState({ ...next, rotationX: 0, rotationOrbit: 0 });
+        return;
+      }
+      setViewState({
+        ...next,
+        rotationX: Math.max(10, Math.min(80, next.rotationX ?? 35)),
+        rotationOrbit: Math.max(-90, Math.min(90, next.rotationOrbit ?? 20)),
+      });
     },
-    [],
+    [viewMode],
   );
 
   // ── Layers ─────────────────────────────────────────────────────────────────
 
   const baseLayers = useMemo(() => {
-    return buildAllLayers(data, visibility, colorMap, corpusLabelMap, selectedUnitIds, overlays);
+    return buildAllLayers(
+      data,
+      visibility,
+      colorMap,
+      corpusLabelMap,
+      selectedUnitIds,
+      overlays,
+      enableDerivedOverlays,
+    );
   }, [
     data,
     visibility,
@@ -147,6 +196,7 @@ export function MapCanvas({
     corpusLabelMap,
     selectedUnitIds,
     overlays,
+    enableDerivedOverlays,
   ]);
 
   const layers = useMemo(() => {
@@ -223,10 +273,14 @@ export function MapCanvas({
   return (
     <div className={styles.canvas}>
       <DeckGL
-        views={new OrthographicView({ id: 'map', flipY: false })}
+        views={viewMode === '3d'
+          ? new OrbitView({ id: 'map' })
+          : new OrthographicView({ id: 'map', flipY: false })}
         viewState={viewState}
         onViewStateChange={handleViewStateChange}
-        controller
+        controller={viewMode === '3d'
+          ? { inertia: true, minZoom: -10, maxZoom: 20 }
+          : true}
         layers={layers}
         onHover={handleHover}
         onClick={handleClick}
