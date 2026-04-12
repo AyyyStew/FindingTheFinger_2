@@ -138,8 +138,18 @@ export function MapCanvas({
 
   // ── Layers ─────────────────────────────────────────────────────────────────
 
+  const baseLayers = useMemo(() => {
+    return buildAllLayers(data, visibility, colorMap, corpusLabelMap, selectedUnitIds, overlays);
+  }, [
+    data,
+    visibility,
+    colorMap,
+    corpusLabelMap,
+    selectedUnitIds,
+    overlays,
+  ]);
+
   const layers = useMemo(() => {
-    const base = buildAllLayers(data, visibility, colorMap, corpusLabelMap, selectedUnitIds, overlays);
     const extras: Layer[] = [];
     if (resultPositions && resultPositions.length > 0) {
       const cl = buildConstellationLayer(resultPositions);
@@ -162,14 +172,9 @@ export function MapCanvas({
       const hl = buildHighlightLayer([highlightPos]);
       if (hl) extras.push(hl);
     }
-    return [...base, ...extras];
+    return [...baseLayers, ...extras];
   }, [
-    data,
-    visibility,
-    colorMap,
-    corpusLabelMap,
-    selectedUnitIds,
-    overlays,
+    baseLayers,
     selectedPositions,
     selectedHoverPosition,
     selectedHoverFillAlpha,

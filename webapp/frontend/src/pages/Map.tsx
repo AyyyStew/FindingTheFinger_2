@@ -48,7 +48,6 @@ const METHOD_TOOLTIPS: Record<ProjectionMethod, string> = {
 const KDE_BREAKDOWN_LABELS: Record<KdeBreakdown, string> = {
   overall: 'whole view',
   corpus: 'by corpus',
-  level: 'by level',
 };
 
 function rgbTupleToCss([r, g, b]: [number, number, number]): string {
