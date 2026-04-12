@@ -69,6 +69,8 @@ interface MapCanvasProps {
   fitToBoundsToken?: number;
   /** Whether planar-only overlays (Voronoi/KDE) are enabled for this view mode. */
   enablePlanarDerivedOverlays?: boolean;
+  /** Axis labels for orientation gizmo in 3D mode. */
+  axisLabels?: [string, string, string];
 }
 
 function flattenPositionsTo2D(positions: Float32Array): Float32Array {
@@ -120,6 +122,7 @@ export function MapCanvas({
   viewMode = '2d',
   fitToBoundsToken = 0,
   enablePlanarDerivedOverlays = true,
+  axisLabels = ['X', 'Y', 'Z'],
 }: MapCanvasProps) {
   const [viewState, setViewState] = useState<DeckViewState>(
     () => computeInitialViewState(data.bounds, viewMode),
@@ -209,14 +212,34 @@ export function MapCanvas({
         setViewState({ ...next, rotationX: 0, rotationOrbit: 0 });
         return;
       }
-      setViewState({
-        ...next,
-        rotationX: Math.max(10, Math.min(80, next.rotationX ?? 35)),
-        rotationOrbit: Math.max(-90, Math.min(90, next.rotationOrbit ?? 20)),
-      });
+      setViewState(next);
     },
     [viewMode],
   );
+
+  const axisVectors2D = useMemo(() => {
+    if (viewMode !== '3d') return null;
+    const orbit = (viewState.rotationOrbit * Math.PI) / 180;
+    const tilt = (viewState.rotationX * Math.PI) / 180;
+    const cosO = Math.cos(orbit);
+    const sinO = Math.sin(orbit);
+    const cosT = Math.cos(tilt);
+    const sinT = Math.sin(tilt);
+
+    const rotate = (vx: number, vy: number, vz: number): [number, number] => {
+      const x1 = vx * cosO - vy * sinO;
+      const y1 = vx * sinO + vy * cosO;
+      const z1 = vz;
+      const y2 = y1 * cosT - z1 * sinT;
+      return [x1, -y2];
+    };
+
+    return [
+      rotate(1, 0, 0),
+      rotate(0, 1, 0),
+      rotate(0, 0, 1),
+    ] as [readonly [number, number], readonly [number, number], readonly [number, number]];
+  }, [viewMode, viewState.rotationOrbit, viewState.rotationX]);
 
   // ── Layers ─────────────────────────────────────────────────────────────────
 
@@ -323,13 +346,36 @@ export function MapCanvas({
         viewState={viewState}
         onViewStateChange={handleViewStateChange}
         controller={viewMode === '3d'
-          ? { inertia: true, minZoom: -10, maxZoom: 20 }
+          ? { inertia: true, minZoom: -30, maxZoom: 30 }
           : true}
         layers={layers}
         onHover={handleHover}
         onClick={handleClick}
         getCursor={({ isDragging }: { isDragging: boolean }) => (isDragging ? 'grabbing' : 'crosshair')}
       />
+      {viewMode === '3d' && axisVectors2D && (
+        <div className={styles.axisGizmo} aria-hidden="true">
+          <svg viewBox="-30 -30 60 60" className={styles.axisSvg}>
+            {axisVectors2D.map(([vx, vy], idx) => {
+              const scale = 18;
+              const x2 = vx * scale;
+              const y2 = vy * scale;
+              const tx = vx * 24;
+              const ty = vy * 24;
+              const color = idx === 0 ? '#ff6b6b' : idx === 1 ? '#4cd48a' : '#6ca8ff';
+              return (
+                <g key={axisLabels[idx]}>
+                  <line x1={0} y1={0} x2={x2} y2={y2} stroke={color} strokeWidth={2} />
+                  <text x={tx} y={ty} fill={color} className={styles.axisLabel}>
+                    {axisLabels[idx]}
+                  </text>
+                </g>
+              );
+            })}
+            <circle cx={0} cy={0} r={2.4} fill="#c9d3e8" />
+          </svg>
+        </div>
+      )}
     </div>
   );
 }

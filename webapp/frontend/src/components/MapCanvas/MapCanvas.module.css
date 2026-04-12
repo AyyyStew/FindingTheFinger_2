@@ -5,3 +5,29 @@
   background: var(--color-bg);
   /* deck.gl mounts its own canvas inside this div */
 }
+
+.axisGizmo {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 86px;
+  height: 86px;
+  border-radius: 10px;
+  background: rgb(8 12 20 / 72%);
+  border: 1px solid rgb(255 255 255 / 18%);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+
+.axisSvg {
+  width: 100%;
+  height: 100%;
+}
+
+.axisLabel {
+  font-size: 6.2px;
+  font-weight: 700;
+  letter-spacing: 0.25px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}

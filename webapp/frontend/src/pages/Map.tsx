@@ -60,6 +60,19 @@ function flyToPoint(x: number, y: number, z: number): FlyToTarget {
   return { target: [x, y, z] };
 }
 
+function getAxisLabels(
+  method: ProjectionMethod,
+  xPc: number,
+  yPc: number,
+  zPc: number,
+): [string, string, string] {
+  if (method === 'pca') {
+    return [`PC${xPc + 1}`, `PC${yPc + 1}`, `PC${zPc + 1}`];
+  }
+  const prefix = method.toUpperCase();
+  return [`${prefix} 1`, `${prefix} 2`, `${prefix} 3`];
+}
+
 export function Map() {
   const [method, setMethod] = useState<ProjectionMethod>('umap');
   const [viewMode, setViewMode] = useState<MapViewMode>('2d');
@@ -244,6 +257,10 @@ export function Map() {
   }, [searchResults, anchorUnitId, unitPositionMap]);
 
   const visibleResultPositions = rightPanelTab === 'search' ? resultPositions : null;
+  const axisLabels = useMemo<[string, string, string]>(
+    () => getAxisLabels(method, xPc, yPc, zPc),
+    [method, xPc, yPc, zPc],
+  );
 
   const compareSelectionSet = useMemo(() => new globalThis.Set(compareSelectionIds), [compareSelectionIds]);
   const compareSelectionPositions = useMemo(() => {
@@ -625,6 +642,7 @@ export function Map() {
                 viewMode={viewMode}
                 fitToBoundsToken={fitToBoundsToken}
                 enablePlanarDerivedOverlays={viewMode === '2d'}
+                axisLabels={axisLabels}
                 onHover={setHover}
                 onClick={handleMapClick}
                 resultPositions={visibleResultPositions}
