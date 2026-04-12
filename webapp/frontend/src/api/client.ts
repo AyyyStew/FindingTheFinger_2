@@ -63,12 +63,24 @@ export function fetchUnit(unitId: number): Promise<UnitBrief> {
   return get(`/api/units/${unitId}`)
 }
 
+export function fetchUnitAncestors(unitId: number): Promise<UnitBrief[]> {
+  return get(`/api/units/${unitId}/ancestors`)
+}
+
 export function getUnitChildren(unitId: number, limit?: number, offset?: number): Promise<UnitChildPreview[]> {
   const params = new URLSearchParams()
   if (limit != null) params.set('limit', String(limit))
   if (offset != null) params.set('offset', String(offset))
   const qs = params.toString()
   return get(`/api/units/${unitId}/children${qs ? `?${qs}` : ''}`)
+}
+
+export function fetchUnitLeaves(unitId: number, limit?: number, offset?: number): Promise<UnitBrief[]> {
+  const params = new URLSearchParams()
+  if (limit != null) params.set('limit', String(limit))
+  if (offset != null) params.set('offset', String(offset))
+  const qs = params.toString()
+  return get(`/api/units/${unitId}/leaves${qs ? `?${qs}` : ''}`)
 }
 
 export function fetchUnitDetail(unitId: number): Promise<UnitDetail> {

@@ -1,7 +1,7 @@
 import math
 
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func, or_, select
 
 from db.models import Corpus, CorpusVersion, Embedding, Method, Unit
@@ -186,6 +186,83 @@ def get_unit_children(
 @router.get("/{unit_id}", response_model=UnitBrief)
 def get_unit(unit_id: int, db: Session = Depends(get_db)):
     return _fetch_unit_brief(db, unit_id)
+
+
+@router.get("/{unit_id}/ancestors", response_model=list[UnitBrief])
+def get_unit_ancestors(unit_id: int, db: Session = Depends(get_db)):
+    """
+    Ancestor chain from root -> ... -> self for breadcrumb navigation.
+    """
+    tax_map = build_corpus_taxonomy_map(db)
+    chain: list[UnitBrief] = []
+    seen: set[int] = set()
+    current_id: int | None = unit_id
+
+    while current_id is not None:
+        if current_id in seen:
+            # Defensive break in case of accidental cycle in source data.
+            break
+        seen.add(current_id)
+
+        row = db.execute(
+            select(Unit, Corpus.name, CorpusVersion.translation_name)
+            .join(Corpus, Corpus.id == Unit.corpus_id)
+            .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
+            .where(Unit.id == current_id)
+        ).first()
+        if row is None:
+            if not chain:
+                raise HTTPException(status_code=404, detail=f"Unit {unit_id} not found")
+            break
+
+        unit, corpus_name, version_name = row
+        chain.append(_row_to_brief(unit, corpus_name, version_name, tax_map.get(unit.corpus_id, [])))
+        current_id = unit.parent_id
+
+    chain.reverse()
+    return chain
+
+
+@router.get("/{unit_id}/leaves", response_model=list[UnitBrief])
+def get_unit_leaves(
+    unit_id: int,
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """
+    Leaf descendants (height=0) of a unit. If unit_id is itself a leaf, returns it.
+    Ordered by id for stable paging.
+    """
+    root = db.execute(
+        select(Unit.id).where(Unit.id == unit_id)
+    ).scalar_one_or_none()
+    if root is None:
+        raise HTTPException(status_code=404, detail=f"Unit {unit_id} not found")
+
+    tax_map = build_corpus_taxonomy_map(db)
+
+    descendants = select(Unit.id.label("id")).where(Unit.id == unit_id).cte(name="descendants", recursive=True)
+    child = aliased(Unit)
+    descendants = descendants.union_all(
+        select(child.id).where(child.parent_id == descendants.c.id)
+    )
+
+    rows = db.execute(
+        select(Unit, Corpus.name, CorpusVersion.translation_name)
+        .join(Corpus, Corpus.id == Unit.corpus_id)
+        .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
+        .where(Unit.id.in_(select(descendants.c.id)))
+        .where(Unit.height == 0)
+        .order_by(Unit.id)
+        .offset(offset)
+        .limit(limit)
+    ).all()
+
+    return [
+        _row_to_brief(unit, corpus_name, version_name, tax_map.get(unit.corpus_id, []))
+        for unit, corpus_name, version_name in rows
+    ]
 
 
 @router.get("/{unit_id}/detail", response_model=UnitDetail)
