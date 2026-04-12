@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import {
+  fetchCorpora,
   fetchUnitAncestors,
   fetchUnitDetail,
   fetchUnitLeaves,
@@ -36,6 +37,46 @@ export function Read() {
   );
 
   const isNonLeaf = (data?.height ?? 0) > 0;
+
+  const { data: corpora = [] } = useQuery({
+    queryKey: ["corpora"],
+    queryFn: fetchCorpora,
+    staleTime: Infinity,
+  });
+
+  const corpus = useMemo(
+    () => corpora.find((c) => c.name === data?.corpus_name),
+    [corpora, data?.corpus_name],
+  );
+
+  const childLevelTitle = useMemo(() => {
+    if (!isNonLeaf || !corpus || data?.height == null) return "Levels";
+    const childHeight = Math.max(0, data.height - 1);
+    const levelName =
+      corpus.levels.find((level) => level.height === childHeight)?.name ??
+      "Level";
+    return levelName.endsWith("s") ? levelName : `${levelName}s`;
+  }, [corpus, data?.height, isNonLeaf]);
+
+  const headerSourceText = useMemo(() => {
+    if (!data) return null;
+    if (data.unit_source && data.version_source) {
+      return `Unit: ${data.unit_source} • Version: ${data.version_source}`;
+    }
+    return data.unit_source ?? data.version_source;
+  }, [data]);
+
+  const sourceItems = useMemo(() => {
+    if (!data) return [];
+    const items: Array<{ label: string; value: string }> = [];
+    if (data.unit_source) items.push({ label: "Unit", value: data.unit_source });
+    if (data.version_source) {
+      items.push({ label: "Version", value: data.version_source });
+    }
+    return items;
+  }, [data]);
+
+  const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
 
   const { data: ancestors = [], isLoading: ancestorsLoading } = useQuery({
     queryKey: ["unit-ancestors", id],
@@ -112,89 +153,99 @@ export function Read() {
 
       {data && (
         <>
+          {ancestors.length > 0 ? (
+            <nav className={styles.path} aria-label="Passage breadcrumbs">
+              {ancestors.map((a, idx) => (
+                <span key={a.id} className={styles.pathChunk}>
+                  <Link to={`/read/${a.id}`} className={styles.pathLink}>
+                    {a.reference_label ?? `Unit ${a.id}`}
+                  </Link>
+                  {idx < ancestors.length - 1 && (
+                    <span className={styles.pathSep}> / </span>
+                  )}
+                </span>
+              ))}
+            </nav>
+          ) : (
+            data.ancestor_path &&
+            !ancestorsLoading && (
+              <p className={styles.path}>{data.ancestor_path}</p>
+            )
+          )}
           <header className={styles.header}>
             <h1 className={styles.title}>
               {data.reference_label ?? `Unit ${data.id}`}
             </h1>
+            {taxonomyPath && <p className={styles.taxonomy}>{taxonomyPath}</p>}
             <div className={styles.meta}>
               <span>{data.corpus_name}</span>
               {data.corpus_version_name && (
                 <span>• {data.corpus_version_name}</span>
               )}
             </div>
-            {taxonomyPath && <p className={styles.taxonomy}>{taxonomyPath}</p>}
-            {ancestors.length > 0 ? (
-              <nav className={styles.path} aria-label="Passage breadcrumbs">
-                {ancestors.map((a, idx) => (
-                  <span key={a.id} className={styles.pathChunk}>
-                    <Link to={`/read/${a.id}`} className={styles.pathLink}>
-                      {a.reference_label ?? `Unit ${a.id}`}
-                    </Link>
-                    {idx < ancestors.length - 1 && (
-                      <span className={styles.pathSep}> / </span>
+            {headerSourceText && (
+              <p className={styles.headerSource}>
+                Source:{" "}
+                {sourceItems.map((item, idx) => (
+                  <span key={`${item.label}-${idx}`}>
+                    {sourceItems.length > 1 ? `${item.label}: ` : ""}
+                    {isHttpUrl(item.value) ? (
+                      <a
+                        className={styles.headerSourceLink}
+                        href={item.value}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {item.value}
+                      </a>
+                    ) : (
+                      item.value
                     )}
+                    {idx < sourceItems.length - 1 && " • "}
                   </span>
                 ))}
-              </nav>
-            ) : (
-              data.ancestor_path &&
-              !ancestorsLoading && (
-                <p className={styles.path}>{data.ancestor_path}</p>
-              )
+              </p>
             )}
           </header>
 
-          <section className={styles.textBlock}>
-            <h2 className={styles.blockTitle}>Cleaned Text</h2>
-            <p className={styles.cleanedText}>
-              {data.cleaned_text ?? "No cleaned text available."}
-            </p>
-          </section>
+          {!isNonLeaf && (
+            <>
+              <section className={styles.textBlock}>
+                <h2 className={styles.blockTitle}>Cleaned Text</h2>
+                <p className={styles.cleanedText}>
+                  {data.cleaned_text ?? "No cleaned text available."}
+                </p>
+              </section>
 
-          <section className={styles.textBlockOriginal}>
-            <h2 className={styles.blockTitle}>Original Text</h2>
-            <p className={styles.originalText}>
-              {data.original_text ?? "No original text available."}
-            </p>
-          </section>
-
-          <section className={styles.sources}>
-            <h2 className={styles.blockTitle}>Source</h2>
-            {data.unit_source && (
-              <p className={styles.sourceLine}>
-                <strong>Unit source:</strong> {data.unit_source}
-              </p>
-            )}
-            {data.version_source && (
-              <p className={styles.sourceLine}>
-                <strong>Version source:</strong> {data.version_source}
-              </p>
-            )}
-            {!data.unit_source && !data.version_source && (
-              <p className={styles.sourceFallback}>
-                No source attribution available.
-              </p>
-            )}
-          </section>
+              <section className={styles.textBlockOriginal}>
+                <h2 className={styles.blockTitle}>Original Text</h2>
+                <p className={styles.originalText}>
+                  {data.original_text ?? "No original text available."}
+                </p>
+              </section>
+            </>
+          )}
 
           {isNonLeaf && (
             <section className={styles.levelSection}>
-              <h2 className={styles.blockTitle}>Levels</h2>
+              <h2 className={styles.blockTitle}>{childLevelTitle}</h2>
               {childrenLoading && (
-                <p className={styles.loading}>Loading levels...</p>
+                <p className={styles.loading}>
+                  Loading {childLevelTitle.toLowerCase()}...
+                </p>
               )}
               {childrenError && (
                 <p className={styles.error}>
                   {childrenError instanceof Error
                     ? childrenError.message
-                    : "Failed to load levels"}
+                    : `Failed to load ${childLevelTitle.toLowerCase()}`}
                 </p>
               )}
               {!childrenLoading &&
                 !childrenError &&
                 childLinks.length === 0 && (
                   <p className={styles.sourceFallback}>
-                    No child levels available.
+                    No {childLevelTitle.toLowerCase()} available.
                   </p>
                 )}
               {!childrenLoading && !childrenError && childLinks.length > 0 && (
@@ -215,43 +266,40 @@ export function Read() {
 
           {isNonLeaf && (
             <section className={styles.leafSection}>
-              <h2 className={styles.blockTitle}>Leaf Passages</h2>
+              <h2 className={styles.blockTitle}>Passages</h2>
               {leavesLoading && (
-                <p className={styles.loading}>Loading leaf passages...</p>
+                <p className={styles.loading}>Loading passages...</p>
               )}
               {leavesError && (
                 <p className={styles.error}>
                   {leavesError instanceof Error
                     ? leavesError.message
-                    : "Failed to load leaf passages"}
+                    : "Failed to load passages"}
                 </p>
               )}
               {!leavesLoading && !leavesError && leaves.length === 0 && (
-                <p className={styles.sourceFallback}>No leaf passages found.</p>
+                <p className={styles.sourceFallback}>No passages found.</p>
               )}
               {!leavesLoading && !leavesError && leaves.length > 0 && (
                 <>
-                  <div className={styles.leafList}>
+                  <div className={styles.passageList}>
                     {leaves.map((leaf) => (
-                      <article key={leaf.id} className={styles.leafCard}>
-                        <div className={styles.leafHeader}>
-                          <span className={styles.leafLabel}>
+                      <article key={leaf.id} className={styles.passageRow}>
+                        <div className={styles.passageBody}>
+                          <span className={styles.passageLabel}>
                             {leaf.reference_label ?? `Unit ${leaf.id}`}
                           </span>
-                          <Link
-                            className={styles.inlineReadLink}
-                            to={`/read/${leaf.id}`}
-                          >
-                            Read
-                          </Link>
-                        </div>
-                        {leaf.text ? (
-                          <p className={styles.leafText}>{leaf.text}</p>
-                        ) : (
-                          <p className={styles.leafTextMuted}>
-                            No cleaned text available.
+                          <span className={styles.passageSep}>:</span>
+                          <p className={styles.passageText}>
+                            {leaf.text ?? "No cleaned text available."}
                           </p>
-                        )}
+                        </div>
+                        <Link
+                          className={styles.inlineReadLink}
+                          to={`/read/${leaf.id}`}
+                        >
+                          Read
+                        </Link>
                       </article>
                     ))}
                   </div>
