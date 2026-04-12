@@ -6,11 +6,11 @@
  * follow the same pattern and slot into buildAllLayers().
  */
 
-import { ScatterplotLayer } from '@deck.gl/layers';
+import { ScatterplotLayer, LineLayer } from '@deck.gl/layers';
 import type { Layer } from '@deck.gl/core';
 import type { CorpusInfo } from '../api/types';
 import { getTaxonomyColor } from './taxonomyColors';
-import type { HeightLayerData, DepthLayerData, StandardRunData } from './projectionLoader';
+import type { DepthLayerData, StandardRunData } from './projectionLoader';
 
 // ── Visibility state ──────────────────────────────────────────────────────────
 //
@@ -195,6 +195,73 @@ export function buildDepthScatterLayers(
       });
     })
     .filter((l): l is ScatterplotLayer => l !== null);
+}
+
+// ── Highlight + constellation layers (search results) ────────────────────────
+
+/**
+ * Bright gold ring for each search result position.
+ * Rendered on top of the scatter layers.
+ */
+export function buildHighlightLayer(positions: [number, number][]): Layer | null {
+  if (positions.length === 0) return null;
+  const count = positions.length;
+  const posArr = new Float32Array(count * 2);
+  const fillColors = new Uint8Array(count * 4);
+  const lineColors = new Uint8Array(count * 4);
+  for (let i = 0; i < count; i++) {
+    posArr[i * 2]     = positions[i][0];
+    posArr[i * 2 + 1] = positions[i][1];
+    // Gold fill: #c9a96e
+    fillColors[i * 4]     = 201;
+    fillColors[i * 4 + 1] = 169;
+    fillColors[i * 4 + 2] = 110;
+    fillColors[i * 4 + 3] = 230;
+    // White outline
+    lineColors[i * 4]     = 255;
+    lineColors[i * 4 + 1] = 255;
+    lineColors[i * 4 + 2] = 255;
+    lineColors[i * 4 + 3] = 180;
+  }
+  return new ScatterplotLayer({
+    id: 'search-highlight',
+    data: {
+      length: count,
+      attributes: {
+        getPosition: { value: posArr, size: 2 },
+        getFillColor: { value: fillColors, size: 4 },
+        getLineColor: { value: lineColors, size: 4 },
+      },
+    },
+    getRadius: 7,
+    radiusUnits: 'pixels',
+    pickable: false,
+    stroked: true,
+    lineWidthMinPixels: 1.5,
+    parameters: { depthTest: false },
+  });
+}
+
+/**
+ * Lines from positions[0] (hub/anchor) to every other position.
+ * For passage search: hub = the queried passage.
+ * For semantic/keyword: hub = the top result.
+ */
+export function buildConstellationLayer(positions: [number, number][]): Layer | null {
+  if (positions.length < 2) return null;
+  const [hub, ...spokes] = positions;
+  const lines = spokes.map(pos => ({ from: hub, to: pos }));
+  return new LineLayer({
+    id: 'search-constellation',
+    data: lines,
+    getSourcePosition: (d: { from: [number, number] }) => d.from,
+    getTargetPosition: (d: { to: [number, number] }) => d.to,
+    getColor: [201, 169, 110, 255],
+    getWidth: 1.5,
+    widthUnits: 'pixels',
+    pickable: false,
+    parameters: { depthTest: false },
+  });
 }
 
 // ── Future extension points ───────────────────────────────────────────────────

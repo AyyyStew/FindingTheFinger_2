@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCorpora, fetchUnit } from '../api/client';
+import type { SearchResult } from '../api/types';
 import { useProjectionData } from '../hooks/useProjectionData';
 import {
   buildCorpusColorMap,
@@ -23,11 +24,37 @@ const METHOD_TOOLTIPS: Record<ProjectionMethod, string> = {
   phate:  'PHATE — diffusion-based geometry. Preserves both local clusters and global continuous trajectories.',
   isomap: 'Isomap — geodesic distances on a manifold. Preserves global curved structure and inter-cluster geometry.',
 };
-import { MapCanvas, type HoverInfo } from '../components/MapCanvas/MapCanvas';
+import { MapCanvas, type HoverInfo, type FlyToTarget } from '../components/MapCanvas/MapCanvas';
 import { LayerPanel } from '../components/LayerPanel/LayerPanel';
+import { MapSearchPanel, type MapSearchPanelHandle, type SearchMode } from '../components/MapSearchPanel/MapSearchPanel';
 import { UnitCard } from '../components/UnitCard/UnitCard';
 import type { LeafLayerData } from '../utils/projectionLoader';
 import styles from './Map.module.css';
+
+/** Build unitId → [x, y] lookup from all layers in a resolved projection. */
+function buildUnitPositionMap(data: StandardRunData): globalThis.Map<number, [number, number]> {
+  const map = new globalThis.Map<number, [number, number]>();
+  for (const [, layer] of data.layers) {
+    const pos = layer.positions;
+    for (let i = 0; i < layer.count; i++) {
+      map.set(layer.unitIds[i], [pos[i * 2], pos[i * 2 + 1]]);
+    }
+  }
+  for (const [, layer] of data.depthLayers) {
+    const pos = layer.positions;
+    for (let i = 0; i < layer.count; i++) {
+      if (!map.has(layer.unitIds[i])) {
+        map.set(layer.unitIds[i], [pos[i * 2], pos[i * 2 + 1]]);
+      }
+    }
+  }
+  return map;
+}
+
+/** Pan to a point, preserving the current zoom level. */
+function flyToPoint(x: number, y: number): FlyToTarget {
+  return { target: [x, y, 0] };
+}
 
 export function Map() {
   const [method, setMethod] = useState<ProjectionMethod>('umap');
@@ -49,7 +76,6 @@ export function Map() {
   const [visibility, setVisibility] = useState<MapVisibility | null>(null);
 
   // Resolve projection data into a StandardRunData for the canvas.
-  // For PCA: build positions from selected PC pair. Reset when method changes.
   const resolvedData = useMemo<StandardRunData | null>(() => {
     if (!projData) return null;
     if (isPcaRunData(projData)) {
@@ -64,11 +90,14 @@ export function Map() {
     return defaultVisibility(resolvedData.manifest.heights, resolvedData.manifest.depths);
   }, [visibility, resolvedData]);
 
-  // Reset visibility when method changes so layer defaults are recalculated.
+  // Reset visibility + search results when method changes.
   const handleMethodChange = (next: ProjectionMethod) => {
     setMethod(next);
     setXPc(0);
     setYPc(1);
+    setVisibility(null);
+    setSearchResults(null);
+    setAnchorUnitId(null);
   };
 
   const [hover, setHover] = useState<HoverInfo | null>(null);
@@ -99,6 +128,100 @@ export function Map() {
     staleTime: Infinity,
   });
 
+  // ── Search result highlighting ─────────────────────────────────────────────
+
+  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
+  const [anchorUnitId, setAnchorUnitId] = useState<number | null>(null);
+
+  /** Map from unitId → [x, y] built once from all height+depth layers. */
+  const unitPositionMap = useMemo(
+    () => resolvedData ? buildUnitPositionMap(resolvedData) : new globalThis.Map<number, [number, number]>(),
+    [resolvedData],
+  );
+
+  /**
+   * Unit IDs that are currently visible on the map — i.e. in an enabled
+   * layer AND in a visible corpus. Search results are filtered to this set.
+   */
+  const visibleUnitIds = useMemo(() => {
+    if (!resolvedData || !resolvedVisibility) return null;
+    const set = new globalThis.Set<number>();
+    const hiddenCorpora = new globalThis.Set(
+      Object.entries(resolvedVisibility.corpora)
+        .filter(([, v]) => !v)
+        .map(([k]) => Number(k)),
+    );
+
+    if (resolvedVisibility.scatterMode === 'height') {
+      for (const [h, layer] of resolvedData.layers) {
+        if (resolvedVisibility.scatter[h] === false) continue;
+        for (let i = 0; i < layer.count; i++) {
+          if (!hiddenCorpora.has(layer.corpusIds[i])) set.add(layer.unitIds[i]);
+        }
+      }
+    } else {
+      for (const [d, layer] of resolvedData.depthLayers) {
+        if (resolvedVisibility.scatterDepth[d] === false) continue;
+        for (let i = 0; i < layer.count; i++) {
+          if (!hiddenCorpora.has(layer.corpusIds[i])) set.add(layer.unitIds[i]);
+        }
+      }
+    }
+    return set.size > 0 ? set : null;
+  }, [resolvedData, resolvedVisibility]);
+
+  /**
+   * Positions for the constellation. Index 0 = hub (anchor for passage mode,
+   * top result otherwise). Indices 1..N = result spokes.
+   */
+  const resultPositions = useMemo<[number, number][] | null>(() => {
+    if (!searchResults || searchResults.length === 0) return null;
+    const positions: [number, number][] = [];
+    // Prepend anchor as hub when available (passage search).
+    if (anchorUnitId != null) {
+      const ap = unitPositionMap.get(anchorUnitId);
+      if (ap) positions.push(ap);
+    }
+    for (const r of searchResults.slice(0, 10)) {
+      const p = unitPositionMap.get(r.id);
+      if (p) positions.push(p);
+    }
+    return positions.length > 0 ? positions : null;
+  }, [searchResults, anchorUnitId, unitPositionMap]);
+
+  const [flyTo, setFlyTo] = useState<FlyToTarget | null>(null);
+
+  const handleSearchResults = useCallback((results: SearchResult[], _mode: SearchMode, _label: string, anchor?: number) => {
+    setSearchResults(results.length > 0 ? results : null);
+    setAnchorUnitId(anchor ?? null);
+    // Fly to anchor (passage mode) or first result.
+    const flyTarget = anchor ?? results.find(r => unitPositionMap.has(r.id))?.id;
+    if (flyTarget != null) {
+      const pos = unitPositionMap.get(flyTarget);
+      if (pos) setFlyTo(flyToPoint(pos[0], pos[1]));
+    }
+  }, [unitPositionMap]);
+
+  const [highlightPos, setHighlightPos] = useState<[number, number] | null>(null);
+
+  const searchPanelRef = useRef<MapSearchPanelHandle>(null);
+
+  const handleMapClick = useCallback((info: HoverInfo) => {
+    searchPanelRef.current?.triggerPassageSearch(info.unitId);
+  }, []);
+
+  const handleResultHover = useCallback((result: SearchResult | null) => {
+    if (!result) {
+      setHighlightPos(null);
+      return;
+    }
+    const pos = unitPositionMap.get(result.id);
+    if (pos) {
+      setHighlightPos(pos);
+      setFlyTo(flyToPoint(pos[0], pos[1]));
+    }
+  }, [unitPositionMap]);
+
   if (error) {
     return (
       <div className={styles.centred}>
@@ -107,7 +230,6 @@ export function Map() {
     );
   }
 
-  // PCA axis selector — shown only when method=pca and data is loaded.
   const pcaManifest = (projData && isPcaRunData(projData))
     ? projData.manifest as PcaManifest
     : null;
@@ -144,7 +266,6 @@ export function Map() {
             ))}
           </div>
 
-          {/* PC axis selectors — only visible when method=pca and data loaded */}
           {pcaManifest && (
             <div className={styles.pcaSelectors}>
               <label className={styles.pcaLabel}>
@@ -192,6 +313,10 @@ export function Map() {
                 visibility={resolvedVisibility}
                 colorMap={colorMap}
                 onHover={setHover}
+                onClick={handleMapClick}
+                resultPositions={resultPositions}
+                highlightPos={highlightPos}
+                flyTo={flyTo}
               />
 
               {hover && (
@@ -224,9 +349,15 @@ export function Map() {
         </div>
       </div>
 
-      {/* Right sidebar — search placeholder */}
+      {/* Right sidebar — search */}
       <aside className={styles.rightPanel}>
-        <p className={styles.rightPlaceholder}>Search coming soon</p>
+        <MapSearchPanel
+          ref={searchPanelRef}
+          corpora={corpora}
+          projectionUnitIds={visibleUnitIds}
+          onResults={handleSearchResults}
+          onResultHover={handleResultHover}
+        />
       </aside>
     </div>
   );

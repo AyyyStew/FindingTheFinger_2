@@ -12,9 +12,11 @@ interface Props {
   onSelect: (unit: UnitBrief | null) => void
   corpora: CorpusInfo[]
   selectedCorpusIds: number[]
+  /** Compact mode: replaces selected UnitCard with a one-line pill. */
+  compact?: boolean
 }
 
-export function PassagePicker({ selected, onSelect, selectedCorpusIds }: Props) {
+export function PassagePicker({ selected, onSelect, selectedCorpusIds, compact }: Props) {
   const [inputValue, setInputValue] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
@@ -89,6 +91,19 @@ export function PassagePicker({ selected, onSelect, selectedCorpusIds }: Props) 
   }
 
   if (selected) {
+    if (compact) {
+      const { solid } = getTaxonomyColor(selected.taxonomy)
+      return (
+        <div className={styles.selectedPill} style={{ '--tx-solid': solid } as React.CSSProperties}>
+          <div className={styles.selectedPillAccent} />
+          <span className={styles.selectedPillLabel}>
+            {selected.reference_label ?? `Unit ${selected.id}`}
+          </span>
+          <span className={styles.selectedPillCorpus}>{selected.corpus_name}</span>
+          <button className={styles.clearBtn} onClick={handleClear} aria-label="Clear selection">✕</button>
+        </div>
+      )
+    }
     return (
       <UnitCard
         unit={selected}
@@ -106,7 +121,7 @@ export function PassagePicker({ selected, onSelect, selectedCorpusIds }: Props) 
     <div ref={rootRef} className={styles.root}>
       <input
         ref={inputRef}
-        className={styles.input}
+        className={`${styles.input} ${compact ? styles.inputCompact : ''}`}
         value={inputValue}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}

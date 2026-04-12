@@ -27,4 +27,7 @@ declare module '@deck.gl/layers' {
   export class ScatterplotLayer {
     constructor(props: Record<string, unknown>);
   }
+  export class LineLayer {
+    constructor(props: Record<string, unknown>);
+  }
 }
