@@ -7,6 +7,7 @@ Table overview:
     taxonomy          — hierarchical classification tree (Abrahamic > Judaism, etc.)
     corpus            — canonical text identity (Bible, Quran, etc.)
     corpus_to_taxonomy — many-to-many bridge between corpus and taxonomy
+    source_ref        — canonical provenance source (URL/provider), shared by versions
     corpus_version    — a specific translation/edition of a corpus (Bible KJV, Bible NIV)
     corpus_level      — defines what each height means for a corpus (0=Verse, 1=Chapter, ...)
     unit              — every node in the text tree (verse, chapter, book, etc.)
@@ -78,6 +79,23 @@ class Corpus(Base):
     taxonomies: Mapped[list["CorpusToTaxonomy"]] = relationship(back_populates="corpus")
 
 
+class SourceRef(Base):
+    """Canonical source record (URL/provider) shared by corpus versions."""
+    __tablename__ = "source_ref"
+
+    id:           Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_key:   Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    url:          Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    provider:     Mapped[str | None] = mapped_column(Text)
+    label:        Mapped[str | None] = mapped_column(Text)
+    created_at:   Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    extra_metadata: Mapped[dict | None] = mapped_column("extra_metadata", JSON)
+
+    corpus_versions: Mapped[list["CorpusVersion"]] = relationship(back_populates="source_ref")
+
+
 class CorpusToTaxonomy(Base):
     """Many-to-many bridge between Corpus and Taxonomy."""
     __tablename__ = "corpus_to_taxonomy"
@@ -99,15 +117,20 @@ class CorpusVersion(Base):
 
     id:               Mapped[int]      = mapped_column(Integer, primary_key=True)
     corpus_id:        Mapped[int]      = mapped_column(Integer, ForeignKey("corpus.id"), nullable=False)
+    source_id:        Mapped[int]      = mapped_column(Integer, ForeignKey("source_ref.id"), nullable=False)
     translation_name: Mapped[str|None] = mapped_column(Text)
     translator:       Mapped[str|None] = mapped_column(Text)
     language:         Mapped[str|None] = mapped_column(Text)
-    source:           Mapped[str|None] = mapped_column(Text)
     date_added:       Mapped[datetime|None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     extra_metadata:   Mapped[dict|None] = mapped_column("extra_metadata", JSON)
 
-    corpus: Mapped["Corpus"]     = relationship(back_populates="versions")
-    units:  Mapped[list["Unit"]] = relationship(back_populates="corpus_version")
+    corpus: Mapped["Corpus"]        = relationship(back_populates="versions")
+    source_ref: Mapped["SourceRef"] = relationship(back_populates="corpus_versions")
+    units:  Mapped[list["Unit"]]    = relationship(back_populates="corpus_version")
+
+    __table_args__ = (
+        Index("ix_corpus_version_source_id", "source_id"),
+    )
 
 
 class CorpusLevel(Base):
@@ -158,7 +181,6 @@ class Unit(Base):
     author:           Mapped[str|None] = mapped_column(Text)
     text:             Mapped[str|None] = mapped_column(Text)
     uncleaned_text:   Mapped[str|None] = mapped_column(Text)
-    source:           Mapped[str|None] = mapped_column(Text)
     ancestor_path:    Mapped[str|None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(

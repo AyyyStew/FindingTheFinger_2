@@ -8,3 +8,16 @@ Run
 
 1. scripts/ingest_all.py
    Sees the corpus into the database
+
+1. scripts/pipeline.py
+   Ordered pipeline runner. Keeps `ingest_all` as canonical first step and
+   runs additional reproducible steps (currently source verification).
+
+Examples:
+
+```bash
+./venv/bin/python pipeline/scripts/pipeline.py
+./venv/bin/python pipeline/scripts/pipeline.py --list
+./venv/bin/python pipeline/scripts/pipeline.py --dry-run
+./venv/bin/python pipeline/scripts/pipeline.py --only ingest_all
+```

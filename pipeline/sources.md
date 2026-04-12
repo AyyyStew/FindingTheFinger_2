@@ -1,12 +1,15 @@
+> Deprecated as canonical input. The pipeline now uses `data/sources.json`.
+> Keep this file only for human notes/reference.
+
 ## Github
 
-- Bible verses from [scrollmapper/bible_databases](https://github.com/scrollmapper/bible_databases)
+- Bible [scrollmapper/bible_databases](https://github.com/scrollmapper/bible_databases)
 
 ## Kaggle
 
-- Bhagavad Gita from https://www.kaggle.com/datasets/madhurpant/bhagavad-gita-verses-dataset
-- Bhagavata Purana from https://www.kaggle.com/datasets/madhurpant/srimad-bhagawatam-bhagavata-purana-dataset
-- Quran from https://www.kaggle.com/datasets/imrankhan197/the-quran-dataset
+- Bhagavad Gita: https://www.kaggle.com/datasets/madhurpant/bhagavad-gita-verses-dataset
+- Bhagavata Purana: https://www.kaggle.com/datasets/madhurpant/srimad-bhagawatam-bhagavata-purana-dataset
+- Quran: https://www.kaggle.com/datasets/imrankhan197/the-quran-dataset
 
 ## Gutenberg
 
@@ -18,6 +21,7 @@
 - Upanishads: https://www.gutenberg.org/ebooks/3283
 - Buddhist Birth Stories (Jataka Tales): https://www.gutenberg.org/ebooks/51880
 - Diamond Sutra: https://www.gutenberg.org/ebooks/64623
+- Jataka Tales: https://www.gutenberg.org/ebooks/51880
 
 ## Internet Sacred Texts Archive
 

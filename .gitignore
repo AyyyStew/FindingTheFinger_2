@@ -24,7 +24,8 @@ webapp/frontend/dist/
 webapp/frontend/.vite/
 
 # ===== Data =====
-data/
+data/*
+!data/sources.json
 *.pkl
 *.sqlite
 *.db
@@ -40,3 +41,7 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+.codex
+
+
+backups/

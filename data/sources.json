@@ -1,0 +1,146 @@
+[
+  {
+    "corpus": "Old Testament",
+    "translation": "King James Version",
+    "source_key": "scrollmapper_bible_databases",
+    "url": "https://github.com/scrollmapper/bible_databases",
+    "provider": "GitHub",
+    "label": "scrollmapper/bible_databases"
+  },
+  {
+    "corpus": "New Testament",
+    "translation": "King James Version",
+    "source_key": "scrollmapper_bible_databases",
+    "url": "https://github.com/scrollmapper/bible_databases",
+    "provider": "GitHub",
+    "label": "scrollmapper/bible_databases"
+  },
+  {
+    "corpus": "Quran",
+    "translation": "Clear Quran",
+    "source_key": "kaggle_quran_dataset",
+    "url": "https://www.kaggle.com/datasets/imrankhan197/the-quran-dataset",
+    "provider": "Kaggle",
+    "label": "The Quran Dataset"
+  },
+  {
+    "corpus": "Bhagavad Gita",
+    "translation": "Swami Mukundananda Translation",
+    "source_key": "kaggle_bhagavad_gita_verses",
+    "url": "https://www.kaggle.com/datasets/madhurpant/bhagavad-gita-verses-dataset",
+    "provider": "Kaggle",
+    "label": "Bhagavad Gita Verses Dataset"
+  },
+  {
+    "corpus": "Srimad Bhagavatam",
+    "translation": "Prabhupada Translation",
+    "source_key": "kaggle_srimad_bhagawatam",
+    "url": "https://www.kaggle.com/datasets/madhurpant/srimad-bhagawatam-bhagavata-purana-dataset",
+    "provider": "Kaggle",
+    "label": "Srimad Bhagawatam Dataset"
+  },
+  {
+    "corpus": "Upanishads",
+    "translation": "Swami Paramananda Translation",
+    "source_key": "gutenberg_3283_upanishads",
+    "url": "https://www.gutenberg.org/ebooks/3283",
+    "provider": "Project Gutenberg",
+    "label": "The Upanishads"
+  },
+  {
+    "corpus": "Yoga Sutras of Patanjali",
+    "translation": "Charles Johnston Translation",
+    "source_key": "gutenberg_2526_yoga_sutras",
+    "url": "https://www.gutenberg.org/ebooks/2526",
+    "provider": "Project Gutenberg",
+    "label": "The Yoga Sutras of Patanjali"
+  },
+  {
+    "corpus": "Dhammapada",
+    "translation": "F. Max M\u00fcller Translation",
+    "source_key": "gutenberg_2017_dhammapada",
+    "url": "https://www.gutenberg.org/ebooks/2017",
+    "provider": "Project Gutenberg",
+    "label": "The Dhammapada"
+  },
+  {
+    "corpus": "Diamond Sutra",
+    "translation": "William Gemmell Translation",
+    "source_key": "gutenberg_64623_diamond_sutra",
+    "url": "https://www.gutenberg.org/ebooks/64623",
+    "provider": "Project Gutenberg",
+    "label": "Diamonds and Toads: A Translation of the Vajracchedik\u0101"
+  },
+  {
+    "corpus": "Jataka Tales",
+    "translation": "T.W. Rhys Davids Translation (Volume 1)",
+    "source_key": "gutenberg_51880_jataka",
+    "url": "https://www.gutenberg.org/ebooks/51880",
+    "provider": "Project Gutenberg",
+    "label": "Buddhist Birth Stories"
+  },
+  {
+    "corpus": "Guru Granth Sahib Ji",
+    "translation": "GurbaniDB English Translation",
+    "source_key": "sourceforge_sikher_gurbanidb",
+    "url": "https://sourceforge.net/projects/sikher/",
+    "provider": "SourceForge",
+    "label": "Sikher / GurbaniDB"
+  },
+  {
+    "corpus": "Dao De Jing",
+    "translation": "Bruce Linnell Translation",
+    "source_key": "gutenberg_49965_dao_de_jing",
+    "url": "https://www.gutenberg.org/ebooks/49965",
+    "provider": "Project Gutenberg",
+    "label": "Tao Teh Ching rendered by Bruce Linnell"
+  },
+  {
+    "corpus": "Chuang Tzu",
+    "translation": "Herbert Allen Giles Translation",
+    "source_key": "gutenberg_59709_chuang_tzu",
+    "url": "https://www.gutenberg.org/ebooks/59709",
+    "provider": "Project Gutenberg",
+    "label": "Chuang Tzu: Mystic, Moralist, and Social Reformer"
+  },
+  {
+    "corpus": "Analects of Confucius",
+    "translation": "James Legge Translation",
+    "source_key": "gutenberg_3330_analects",
+    "url": "https://www.gutenberg.org/ebooks/3330",
+    "provider": "Project Gutenberg",
+    "label": "The Chinese Classics: Confucian Analects"
+  },
+  {
+    "corpus": "Kojiki",
+    "translation": "Basil Hall Chamberlain Translation",
+    "source_key": "sacred_texts_kojiki",
+    "url": "https://sacred-texts.com/shi/kj/index.htm",
+    "provider": "Internet Sacred Text Archive",
+    "label": "Kojiki"
+  },
+  {
+    "corpus": "Poetic Edda",
+    "translation": "Henry Adams Bellows Translation",
+    "source_key": "gutenberg_73533_poetic_edda",
+    "url": "https://www.gutenberg.org/ebooks/73533",
+    "provider": "Project Gutenberg",
+    "label": "The Poetic Edda"
+  },
+  {
+    "corpus": "Yasna",
+    "translation": "Lawrence Mills Translation",
+    "source_key": "avesta_yasna",
+    "url": "https://www.avesta.org/yasna/index.html",
+    "provider": "Avesta.org",
+    "label": "Avesta Yasna"
+  },
+  {
+    "corpus": "Vendidad",
+    "translation": "James Darmesteter Translation",
+    "source_key": "avesta_vendidad",
+    "url": "https://www.avesta.org/vendidad/index.html",
+    "provider": "Avesta.org",
+    "label": "Avesta Vendidad"
+  }
+]

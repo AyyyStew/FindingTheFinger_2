@@ -78,6 +78,8 @@ class ParsedCorpus:
     translation_name:   str | None = None
     translator:         str | None = None
     language:           str | None = None
+    # Parser input artifact path (used for ingest provenance metadata).
+    # Canonical public source is stored via source_ref/source_id mapping.
     source:             str | None = None
 
     # Hierarchy definition — one entry per level

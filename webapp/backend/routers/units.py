@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func, or_, select
 
-from db.models import Corpus, CorpusVersion, Embedding, Method, Unit
+from db.models import Corpus, CorpusVersion, Embedding, Method, SourceRef, Unit
 from ..deps import get_db
 from ..schemas import (
     CompareItem,
@@ -268,9 +268,10 @@ def get_unit_leaves(
 @router.get("/{unit_id}/detail", response_model=UnitDetail)
 def get_unit_detail(unit_id: int, db: Session = Depends(get_db)):
     row = db.execute(
-        select(Unit, Corpus.name, CorpusVersion.translation_name, CorpusVersion.source)
+        select(Unit, Corpus.name, CorpusVersion.translation_name, SourceRef.url)
         .join(Corpus, Corpus.id == Unit.corpus_id)
         .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
+        .outerjoin(SourceRef, SourceRef.id == CorpusVersion.source_id)
         .where(Unit.id == unit_id)
     ).first()
     if row is None:
@@ -290,7 +291,7 @@ def get_unit_detail(unit_id: int, db: Session = Depends(get_db)):
         taxonomy=tax_map.get(unit.corpus_id, []),
         cleaned_text=unit.text,
         original_text=unit.uncleaned_text,
-        unit_source=unit.source,
+        unit_source=None,
         version_source=version_source,
     )
 

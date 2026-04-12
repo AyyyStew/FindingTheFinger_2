@@ -15,9 +15,10 @@ Steps:
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from db.models import Corpus, CorpusLevel, CorpusToTaxonomy, CorpusVersion, Taxonomy, Unit
+from db.models import Corpus, CorpusLevel, CorpusToTaxonomy, CorpusVersion, SourceRef, Taxonomy, Unit
 from db.session import get_session
 from pipeline.parsers.base import ParsedCorpus
+from pipeline.sources.catalog import get_source_entry
 
 
 def ingest(parsed: ParsedCorpus, session: Session | None = None) -> CorpusVersion:
@@ -75,10 +76,11 @@ def _ingest(parsed: ParsedCorpus, session: Session) -> CorpusVersion:
 
     version = CorpusVersion(
         corpus_id=corpus.id,
+        source_id=_resolve_source_ref_id(session, parsed),
         translation_name=parsed.translation_name,
         translator=parsed.translator,
         language=parsed.language,
-        source=parsed.source,
+        extra_metadata=_build_version_metadata(parsed),
     )
     session.add(version)
     session.flush()
@@ -122,7 +124,6 @@ def _ingest(parsed: ParsedCorpus, session: Session) -> CorpusVersion:
             text=pu.text,
             uncleaned_text=pu.uncleaned_text,
             ancestor_path=ancestor_path,
-            source=parsed.source,
             extra_metadata=pu.extra_metadata or None,
         )
         session.add(unit)
@@ -148,6 +149,48 @@ def _ingest(parsed: ParsedCorpus, session: Session) -> CorpusVersion:
         _wire_taxonomy(session, corpus.id, parsed.taxonomy_hints)
 
     return version
+
+
+def _build_version_metadata(parsed: ParsedCorpus) -> dict | None:
+    """Persist parser input-path provenance without storing it as canonical source."""
+    if not parsed.source:
+        return None
+    return {"ingest_input_path": parsed.source}
+
+
+def _resolve_source_ref_id(session: Session, parsed: ParsedCorpus) -> int:
+    """Resolve (or create) SourceRef row from canonical data/sources.json mapping."""
+    try:
+        entry = get_source_entry(parsed.name, parsed.translation_name)
+    except KeyError as exc:
+        raise ValueError(str(exc)) from exc
+
+    by_key = session.execute(
+        select(SourceRef).where(SourceRef.source_key == entry.source_key)
+    ).scalar_one_or_none()
+    if by_key is not None:
+        if by_key.url != entry.url:
+            raise ValueError(
+                f"Source key collision for {entry.source_key!r}: "
+                f"catalog url={entry.url!r}, db url={by_key.url!r}"
+            )
+        return by_key.id
+
+    by_url = session.execute(
+        select(SourceRef).where(SourceRef.url == entry.url)
+    ).scalar_one_or_none()
+    if by_url is not None:
+        return by_url.id
+
+    ref = SourceRef(
+        source_key=entry.source_key,
+        url=entry.url,
+        provider=entry.provider,
+        label=entry.label,
+    )
+    session.add(ref)
+    session.flush()
+    return ref.id
 
 
 def _compute_heights(session: Session, corpus_id: int) -> None:
