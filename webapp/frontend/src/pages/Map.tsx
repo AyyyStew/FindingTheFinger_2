@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { fetchCorpora, fetchUnit } from '../api/client';
-import type { SearchResult } from '../api/types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueries, useQuery } from '@tanstack/react-query';
+import { compareUnits, fetchCorpora, fetchUnit } from '../api/client';
+import type { CompareResponse, SearchResult } from '../api/types';
 import { useProjectionData } from '../hooks/useProjectionData';
 import {
   buildCorpusColorMap,
@@ -27,6 +27,7 @@ const METHOD_TOOLTIPS: Record<ProjectionMethod, string> = {
 import { MapCanvas, type HoverInfo, type FlyToTarget } from '../components/MapCanvas/MapCanvas';
 import { LayerPanel } from '../components/LayerPanel/LayerPanel';
 import { MapSearchPanel, type MapSearchPanelHandle, type SearchMode } from '../components/MapSearchPanel/MapSearchPanel';
+import { MapToolsPanel } from '../components/MapToolsPanel/MapToolsPanel';
 import { UnitCard } from '../components/UnitCard/UnitCard';
 import type { LeafLayerData } from '../utils/projectionLoader';
 import styles from './Map.module.css';
@@ -58,6 +59,7 @@ function flyToPoint(x: number, y: number): FlyToTarget {
 
 export function Map() {
   const [method, setMethod] = useState<ProjectionMethod>('umap');
+  const [rightPanelTab, setRightPanelTab] = useState<'search' | 'tools'>('search');
 
   // PCA axis selection (0-indexed component indices)
   const [xPc, setXPc] = useState(0);
@@ -96,6 +98,7 @@ export function Map() {
     setXPc(0);
     setYPc(1);
     setVisibility(null);
+    setHighlightPos(null);
     setSearchResults(null);
     setAnchorUnitId(null);
   };
@@ -132,6 +135,11 @@ export function Map() {
 
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const [anchorUnitId, setAnchorUnitId] = useState<number | null>(null);
+  const [compareSelectionIds, setCompareSelectionIds] = useState<number[]>([]);
+  const [compareReferenceId, setCompareReferenceId] = useState<number | null>(null);
+  const [compareResult, setCompareResult] = useState<CompareResponse | null>(null);
+  const [isComparing, setIsComparing] = useState(false);
+  const [compareError, setCompareError] = useState<string | null>(null);
 
   /** Map from unitId → [x, y] built once from all height+depth layers. */
   const unitPositionMap = useMemo(
@@ -226,6 +234,17 @@ export function Map() {
     return positions.length > 0 ? positions : null;
   }, [searchResults, anchorUnitId, unitPositionMap]);
 
+  const visibleResultPositions = rightPanelTab === 'search' ? resultPositions : null;
+
+  const compareSelectionSet = useMemo(() => new globalThis.Set(compareSelectionIds), [compareSelectionIds]);
+  const selectedUnitQueries = useQueries({
+    queries: compareSelectionIds.map(unitId => ({
+      queryKey: ['unit', unitId],
+      queryFn: () => fetchUnit(unitId),
+      staleTime: Infinity,
+    })),
+  });
+
   const [flyTo, setFlyTo] = useState<FlyToTarget | null>(null);
 
   const handleSearchResults = useCallback((results: SearchResult[], _mode: SearchMode, _label: string, anchor?: number) => {
@@ -241,11 +260,39 @@ export function Map() {
 
   const [highlightPos, setHighlightPos] = useState<[number, number] | null>(null);
 
+  useEffect(() => {
+    if (rightPanelTab === 'tools') {
+      setHighlightPos(null);
+    }
+  }, [rightPanelTab]);
+
   const searchPanelRef = useRef<MapSearchPanelHandle>(null);
 
+  const handleToolsMapClick = useCallback((info: HoverInfo) => {
+    setCompareSelectionIds(prev => {
+      const exists = prev.includes(info.unitId);
+      const next = exists
+        ? prev.filter(id => id !== info.unitId)
+        : [...prev, info.unitId];
+
+      setCompareResult(null);
+      setCompareError(null);
+      if (compareReferenceId != null && !next.includes(compareReferenceId)) {
+        setCompareReferenceId(next[0] ?? null);
+      } else if (compareReferenceId == null && next.length > 0) {
+        setCompareReferenceId(next[0]);
+      }
+      return next;
+    });
+  }, [compareReferenceId]);
+
   const handleMapClick = useCallback((info: HoverInfo) => {
+    if (rightPanelTab === 'tools') {
+      handleToolsMapClick(info);
+      return;
+    }
     searchPanelRef.current?.triggerPassageSearch(info.unitId);
-  }, []);
+  }, [handleToolsMapClick, rightPanelTab]);
 
   const handleResultHover = useCallback((result: SearchResult | null) => {
     if (!result) {
@@ -258,6 +305,85 @@ export function Map() {
       setFlyTo(flyToPoint(pos[0], pos[1]));
     }
   }, [unitPositionMap]);
+
+  useEffect(() => {
+    if (compareSelectionIds.length < 2) {
+      setCompareResult(null);
+      setIsComparing(false);
+      return;
+    }
+
+    const referenceUnitId = compareReferenceId ?? compareSelectionIds[0];
+    if (referenceUnitId == null || !compareSelectionIds.includes(referenceUnitId)) return;
+
+    let cancelled = false;
+    setIsComparing(true);
+    setCompareError(null);
+
+    compareUnits({
+      reference_unit_id: referenceUnitId,
+      unit_ids: compareSelectionIds,
+    })
+      .then(response => {
+        if (cancelled) return;
+        setCompareResult(response);
+        setCompareReferenceId(response.reference_unit.id);
+      })
+      .catch(e => {
+        if (cancelled) return;
+        setCompareError(e instanceof Error ? e.message : 'Compare failed');
+      })
+      .finally(() => {
+        if (!cancelled) setIsComparing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [compareReferenceId, compareSelectionIds]);
+
+  const handleReferenceChange = useCallback((unitId: number) => {
+    setCompareReferenceId(unitId);
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setCompareSelectionIds([]);
+    setCompareReferenceId(null);
+    setCompareResult(null);
+    setCompareError(null);
+  }, []);
+
+  const handleRemoveSelection = useCallback((unitId: number) => {
+    setCompareSelectionIds(prev => {
+      const next = prev.filter(id => id !== unitId);
+      setCompareResult(null);
+      setCompareError(null);
+      setCompareReferenceId(current => {
+        if (current !== unitId) return current;
+        return next[0] ?? null;
+      });
+      return next;
+    });
+  }, []);
+
+  const selectedUnitLabels = useMemo(() => {
+    const labels: Record<number, string | null> = {};
+    for (let i = 0; i < compareSelectionIds.length; i++) {
+      const unitId = compareSelectionIds[i];
+      const fetchedUnit = selectedUnitQueries[i]?.data;
+      labels[unitId] =
+        fetchedUnit?.reference_label ??
+        resolvedData?.unitLabels[String(unitId)] ??
+        null;
+    }
+    if (compareResult) {
+      labels[compareResult.reference_unit.id] = compareResult.reference_unit.reference_label;
+      for (const item of compareResult.items) {
+        labels[item.unit.id] = item.unit.reference_label;
+      }
+    }
+    return labels;
+  }, [compareSelectionIds, compareResult, resolvedData, selectedUnitQueries]);
 
   if (error) {
     return (
@@ -351,7 +477,8 @@ export function Map() {
                 colorMap={colorMap}
                 onHover={setHover}
                 onClick={handleMapClick}
-                resultPositions={resultPositions}
+                resultPositions={visibleResultPositions}
+                selectedUnitIds={rightPanelTab === 'tools' ? compareSelectionSet : null}
                 highlightPos={highlightPos}
                 flyTo={flyTo}
               />
@@ -388,19 +515,66 @@ export function Map() {
 
       {/* Right sidebar — search */}
       <aside className={styles.rightPanel}>
-        <MapSearchPanel
-          ref={searchPanelRef}
-          corpora={corpora}
-          scatterMode={searchScatterMode}
-          visibleUnitIds={visibleUnitIds}
-          visibleCorpusIds={visibleCorpusIds}
-          visibleHeightMin={visibleHeightRange.min}
-          visibleHeightMax={visibleHeightRange.max}
-          visibleDepthMin={visibleDepthRange.min}
-          visibleDepthMax={visibleDepthRange.max}
-          onResults={handleSearchResults}
-          onResultHover={handleResultHover}
-        />
+        <div className={styles.rightPanelTabs} role="tablist" aria-label="Map side panel">
+          <button
+            type="button"
+            className={`${styles.rightPanelTab} ${rightPanelTab === 'search' ? styles.rightPanelTabActive : ''}`}
+            role="tab"
+            aria-selected={rightPanelTab === 'search'}
+            onClick={() => setRightPanelTab('search')}
+          >
+            Search
+          </button>
+          <button
+            type="button"
+            className={`${styles.rightPanelTab} ${rightPanelTab === 'tools' ? styles.rightPanelTabActive : ''}`}
+            role="tab"
+            aria-selected={rightPanelTab === 'tools'}
+            onClick={() => setRightPanelTab('tools')}
+          >
+            Tools
+          </button>
+        </div>
+
+        <div className={styles.rightPanelBody}>
+          <section
+            className={styles.rightPanelPane}
+            aria-hidden={rightPanelTab !== 'search'}
+            hidden={rightPanelTab !== 'search'}
+          >
+            <MapSearchPanel
+              ref={searchPanelRef}
+              corpora={corpora}
+              scatterMode={searchScatterMode}
+              visibleUnitIds={visibleUnitIds}
+              visibleCorpusIds={visibleCorpusIds}
+              visibleHeightMin={visibleHeightRange.min}
+              visibleHeightMax={visibleHeightRange.max}
+              visibleDepthMin={visibleDepthRange.min}
+              visibleDepthMax={visibleDepthRange.max}
+              onResults={handleSearchResults}
+              onResultHover={handleResultHover}
+            />
+          </section>
+
+          <section
+            className={styles.rightPanelPane}
+            aria-hidden={rightPanelTab !== 'tools'}
+            hidden={rightPanelTab !== 'tools'}
+          >
+            <MapToolsPanel
+              selectedUnitIds={compareSelectionIds}
+              selectedUnitLabels={selectedUnitLabels}
+              referenceUnitId={compareReferenceId}
+              isComparing={isComparing}
+              compareError={compareError}
+              compareResult={compareResult}
+              onClearSelection={handleClearSelection}
+              onReferenceChange={handleReferenceChange}
+              onRemoveSelection={handleRemoveSelection}
+            />
+          </section>
+        </div>
       </aside>
     </div>
   );

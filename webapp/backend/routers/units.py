@@ -1,10 +1,12 @@
+import math
+
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, select
 
-from db.models import Corpus, CorpusVersion, Unit
+from db.models import Corpus, CorpusVersion, Embedding, Method, Unit
 from ..deps import get_db
-from ..schemas import TaxonomyLabel, UnitBrief, UnitChildPreview
+from ..schemas import CompareItem, CompareRequest, CompareResponse, TaxonomyLabel, UnitBrief, UnitChildPreview
 from ..taxonomy import build_corpus_taxonomy_map
 
 router = APIRouter(prefix="/api/units")
@@ -27,6 +29,50 @@ def _row_to_brief(
         depth=unit.depth,
         taxonomy=taxonomy,
     )
+
+
+def _default_method_id(db: Session) -> int:
+    method = db.execute(select(Method)).scalars().first()
+    if method is None:
+        raise HTTPException(status_code=503, detail="No embedding methods in database")
+    return method.id
+
+
+def _fetch_unit_brief(db: Session, unit_id: int) -> UnitBrief:
+    row = db.execute(
+        select(Unit, Corpus.name, CorpusVersion.translation_name)
+        .join(Corpus, Corpus.id == Unit.corpus_id)
+        .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
+        .where(Unit.id == unit_id)
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Unit {unit_id} not found")
+    unit, corpus_name, version_name = row
+    tax_map = build_corpus_taxonomy_map(db)
+    return _row_to_brief(unit, corpus_name, version_name, tax_map.get(unit.corpus_id, []))
+
+
+def _fetch_embedding(db: Session, unit_id: int, method_id: int):
+    vector = db.execute(
+        select(Embedding.vector)
+        .where(Embedding.unit_id == unit_id)
+        .where(Embedding.method_id == method_id)
+    ).scalar_one_or_none()
+    if vector is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No embedding found for unit {unit_id} with method {method_id}",
+        )
+    return vector
+
+
+def _cosine_similarity(left: list[float], right: list[float]) -> float:
+    dot = sum(a * b for a, b in zip(left, right))
+    left_norm = math.sqrt(sum(a * a for a in left))
+    right_norm = math.sqrt(sum(b * b for b in right))
+    if left_norm == 0 or right_norm == 0:
+        return 0.0
+    return dot / (left_norm * right_norm)
 
 
 @router.get("/search", response_model=list[UnitBrief])
@@ -122,14 +168,50 @@ def get_unit_children(unit_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{unit_id}", response_model=UnitBrief)
 def get_unit(unit_id: int, db: Session = Depends(get_db)):
-    row = db.execute(
-        select(Unit, Corpus.name, CorpusVersion.translation_name)
+    return _fetch_unit_brief(db, unit_id)
+
+
+@router.post("/compare", response_model=CompareResponse)
+def compare_units(req: CompareRequest, db: Session = Depends(get_db)):
+    method_id = req.method_id or _default_method_id(db)
+    reference_unit = _fetch_unit_brief(db, req.reference_unit_id)
+    reference_vector = list(_fetch_embedding(db, req.reference_unit_id, method_id))
+
+    if not req.unit_ids:
+        return CompareResponse(reference_unit=reference_unit, method_id=method_id, items=[])
+
+    tax_map = build_corpus_taxonomy_map(db)
+    rows = db.execute(
+        select(Unit, Corpus.name, CorpusVersion.translation_name, Embedding.vector)
+        .join(Embedding, Embedding.unit_id == Unit.id)
         .join(Corpus, Corpus.id == Unit.corpus_id)
         .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
-        .where(Unit.id == unit_id)
-    ).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Unit not found")
-    unit, corpus_name, version_name = row
-    tax_map = build_corpus_taxonomy_map(db)
-    return _row_to_brief(unit, corpus_name, version_name, tax_map.get(unit.corpus_id, []))
+        .where(Embedding.method_id == method_id)
+        .where(Unit.id.in_(req.unit_ids))
+    ).all()
+
+    unit_map = {
+        unit.id: (
+            _row_to_brief(unit, corpus_name, version_name, tax_map.get(unit.corpus_id, [])),
+            vector,
+        )
+        for unit, corpus_name, version_name, vector in rows
+    }
+
+    items: list[CompareItem] = []
+    for unit_id in req.unit_ids:
+        entry = unit_map.get(unit_id)
+        if entry is None:
+            continue
+        unit, vector = entry
+        similarity = _cosine_similarity(reference_vector, list(vector))
+        distance = 1.0 - similarity
+        items.append(
+            CompareItem(
+                unit=unit,
+                cosine_similarity=round(similarity, 6),
+                cosine_distance=round(distance, 6),
+            )
+        )
+
+    return CompareResponse(reference_unit=reference_unit, method_id=method_id, items=items)

@@ -79,26 +79,37 @@ function hslToRgb255(h: number, s: number, l: number): [number, number, number] 
 
 // ── Color array builder ───────────────────────────────────────────────────────
 
-function buildColorArray(
+function buildPointStyleArrays(
   layer: { count: number; corpusIds: Int32Array },
   colorMap: CorpusColorMap,
   alpha: number,
   hiddenCorpora: Set<number>,
-): Uint8Array {
-  const arr = new Uint8Array(layer.count * 4);
+  selectedUnitIds: Set<number> | null,
+  unitIds: Int32Array,
+): { fillColors: Uint8Array; lineColors: Uint8Array } {
+  const fillColors = new Uint8Array(layer.count * 4);
+  const lineColors = new Uint8Array(layer.count * 4);
   const fallback: [number, number, number] = [110, 110, 110];
   for (let i = 0; i < layer.count; i++) {
     const corpusId = layer.corpusIds[i];
+    const selected = selectedUnitIds?.has(unitIds[i]) ?? false;
     const [r, g, b] = colorMap.get(corpusId) ?? fallback;
-    arr[i * 4]     = r;
-    arr[i * 4 + 1] = g;
-    arr[i * 4 + 2] = b;
-    arr[i * 4 + 3] = hiddenCorpora.has(corpusId) ? 0 : alpha;
+    fillColors[i * 4]     = selected ? 201 : r;
+    fillColors[i * 4 + 1] = selected ? 169 : g;
+    fillColors[i * 4 + 2] = selected ? 110 : b;
+    fillColors[i * 4 + 3] = hiddenCorpora.has(corpusId) ? 0 : (selected ? 235 : alpha);
+    lineColors[i * 4]     = selected ? 255 : r;
+    lineColors[i * 4 + 1] = selected ? 243 : g;
+    lineColors[i * 4 + 2] = selected ? 209 : b;
+    lineColors[i * 4 + 3] = hiddenCorpora.has(corpusId) ? 0 : (selected ? 235 : 0);
   }
-  return arr;
+  return { fillColors, lineColors };
 }
 
 // ── Scatter layer builder ─────────────────────────────────────────────────────
+
+const MIN_POINT_RADIUS_PX = 5;
+const HIGHLIGHT_RADIUS_PX = 6;
 
 /**
  * One ScatterplotLayer per visible height level.
@@ -108,13 +119,13 @@ export function buildScatterLayers(
   data: StandardRunData,
   visibility: MapVisibility,
   colorMap: CorpusColorMap,
+  selectedUnitIds: Set<number> | null = null,
 ): Layer[] {
   const hiddenCorpora = new Set(
     Object.entries(visibility.corpora)
       .filter(([, v]) => !v)
       .map(([k]) => Number(k)),
   );
-
   return data.manifest.heights
     .filter(h => visibility.scatter[h] !== false)
     .map(h => {
@@ -123,6 +134,14 @@ export function buildScatterLayers(
       // Parents: larger, more opaque — rendered on top via layer order.
       const alpha  = h === 0 ? 180 : 230;
       const radius = h === 0 ? 3   : 4 + h * 3;
+      const { fillColors, lineColors } = buildPointStyleArrays(
+        layer,
+        colorMap,
+        alpha,
+        hiddenCorpora,
+        selectedUnitIds,
+        layer.unitIds,
+      );
 
       return new ScatterplotLayer({
         id: `scatter-h${h}`,
@@ -131,16 +150,20 @@ export function buildScatterLayers(
           length: layer.count,
           attributes: {
             getPosition: { value: layer.positions, size: 2 },
-            getFillColor: { value: buildColorArray(layer, colorMap, alpha, hiddenCorpora), size: 4 },
+            getFillColor: { value: fillColors, size: 4 },
+            getLineColor: { value: lineColors, size: 4 },
           },
         },
         getRadius: radius,
         radiusUnits: 'pixels',
+        radiusMinPixels: MIN_POINT_RADIUS_PX,
+        billboard: true,
         pickable: true,
-        autoHighlight: true,
-        highlightColor: [255, 255, 255, 60],
+        stroked: true,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 1,
         parameters: { depthTest: false },
-        updateTriggers: { getFillColor: [colorMap.size, alpha, visibility.corpora] },
+        updateTriggers: { getFillColor: [colorMap.size, alpha, visibility.corpora, selectedUnitIds?.size ?? 0] },
       });
     });
 }
@@ -156,6 +179,7 @@ export function buildDepthScatterLayers(
   data: StandardRunData,
   visibility: MapVisibility,
   colorMap: CorpusColorMap,
+  selectedUnitIds: Set<number> | null = null,
 ): Layer[] {
   const hiddenCorpora = new Set(
     Object.entries(visibility.corpora)
@@ -164,7 +188,6 @@ export function buildDepthScatterLayers(
   );
 
   const maxDepth = data.manifest.max_depth;
-
   return data.manifest.depths
     .filter(d => visibility.scatterDepth[d] !== false)
     .map(d => {
@@ -175,6 +198,14 @@ export function buildDepthScatterLayers(
       const distFromLeaf = maxDepth - d;
       const alpha  = distFromLeaf === 0 ? 180 : 230;
       const radius = distFromLeaf === 0 ? 3   : 4 + distFromLeaf * 3;
+      const { fillColors, lineColors } = buildPointStyleArrays(
+        layer,
+        colorMap,
+        alpha,
+        hiddenCorpora,
+        selectedUnitIds,
+        layer.unitIds,
+      );
 
       return new ScatterplotLayer({
         id: `scatter-d${d}`,
@@ -182,16 +213,20 @@ export function buildDepthScatterLayers(
           length: layer.count,
           attributes: {
             getPosition: { value: layer.positions, size: 2 },
-            getFillColor: { value: buildColorArray(layer, colorMap, alpha, hiddenCorpora), size: 4 },
+            getFillColor: { value: fillColors, size: 4 },
+            getLineColor: { value: lineColors, size: 4 },
           },
         },
         getRadius: radius,
         radiusUnits: 'pixels',
+        radiusMinPixels: MIN_POINT_RADIUS_PX,
+        billboard: true,
         pickable: true,
-        autoHighlight: true,
-        highlightColor: [255, 255, 255, 60],
+        stroked: true,
+        lineWidthUnits: 'pixels',
+        lineWidthMinPixels: 1,
         parameters: { depthTest: false },
-        updateTriggers: { getFillColor: [colorMap.size, alpha, visibility.corpora] },
+        updateTriggers: { getFillColor: [colorMap.size, alpha, visibility.corpora, selectedUnitIds?.size ?? 0] },
       });
     })
     .filter((l): l is ScatterplotLayer => l !== null);
@@ -200,8 +235,7 @@ export function buildDepthScatterLayers(
 // ── Highlight + constellation layers (search results) ────────────────────────
 
 /**
- * Bright gold ring for each search result position.
- * Rendered on top of the scatter layers.
+ * Subtle gold cue for search result hover / focus.
  */
 export function buildHighlightLayer(positions: [number, number][]): Layer | null {
   if (positions.length === 0) return null;
@@ -216,12 +250,12 @@ export function buildHighlightLayer(positions: [number, number][]): Layer | null
     fillColors[i * 4]     = 201;
     fillColors[i * 4 + 1] = 169;
     fillColors[i * 4 + 2] = 110;
-    fillColors[i * 4 + 3] = 230;
-    // White outline
-    lineColors[i * 4]     = 255;
-    lineColors[i * 4 + 1] = 255;
-    lineColors[i * 4 + 2] = 255;
-    lineColors[i * 4 + 3] = 180;
+    fillColors[i * 4 + 3] = 160;
+    // Soft outline
+    lineColors[i * 4]     = 201;
+    lineColors[i * 4 + 1] = 169;
+    lineColors[i * 4 + 2] = 110;
+    lineColors[i * 4 + 3] = 220;
   }
   return new ScatterplotLayer({
     id: 'search-highlight',
@@ -233,11 +267,14 @@ export function buildHighlightLayer(positions: [number, number][]): Layer | null
         getLineColor: { value: lineColors, size: 4 },
       },
     },
-    getRadius: 7,
+    getRadius: 4.5,
     radiusUnits: 'pixels',
+    radiusMinPixels: HIGHLIGHT_RADIUS_PX,
+    billboard: true,
     pickable: false,
     stroked: true,
-    lineWidthMinPixels: 1.5,
+    lineWidthUnits: 'pixels',
+    lineWidthMinPixels: 1,
     parameters: { depthTest: false },
   });
 }
@@ -288,10 +325,11 @@ export function buildAllLayers(
   data: StandardRunData,
   visibility: MapVisibility,
   colorMap: CorpusColorMap,
+  selectedUnitIds: Set<number> | null = null,
 ): Layer[] {
   const scatterLayers = visibility.scatterMode === 'depth'
-    ? buildDepthScatterLayers(data, visibility, colorMap)
-    : buildScatterLayers(data, visibility, colorMap);
+    ? buildDepthScatterLayers(data, visibility, colorMap, selectedUnitIds)
+    : buildScatterLayers(data, visibility, colorMap, selectedUnitIds);
   return [
     ...scatterLayers,
     // ...buildCloudLayers(data, visibility, colorMap),   // future

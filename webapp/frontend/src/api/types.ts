@@ -102,3 +102,21 @@ export interface PassageSearchRequest {
   offset?: number
   exclude_self?: boolean
 }
+
+export interface CompareRequest {
+  reference_unit_id: number
+  unit_ids: number[]
+  method_id?: number
+}
+
+export interface CompareItem {
+  unit: UnitBrief
+  cosine_similarity: number
+  cosine_distance: number
+}
+
+export interface CompareResponse {
+  reference_unit: UnitBrief
+  method_id: number
+  items: CompareItem[]
+}

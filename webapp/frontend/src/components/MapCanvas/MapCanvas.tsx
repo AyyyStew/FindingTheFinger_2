@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import DeckGL from '@deck.gl/react';
 import { OrthographicView } from '@deck.gl/core';
-import type { PickingInfo } from '@deck.gl/core';
+import type { Layer, PickingInfo } from '@deck.gl/core';
 import type { StandardRunData } from '../../utils/projectionLoader';
 import {
   buildAllLayers,
+  buildHighlightLayer,
   buildConstellationLayer,
   type MapVisibility,
   type CorpusColorMap,
@@ -42,6 +43,8 @@ interface MapCanvasProps {
   onClick?: (info: HoverInfo) => void;
   /** Positions (up to 10) of search result units. Index 0 = hub/anchor. */
   resultPositions?: [number, number][] | null;
+  /** Selected comparison unit IDs shown in tools mode. */
+  selectedUnitIds?: Set<number> | null;
   /** When set, shows a pulsing highlight ring at this map position (result card hover). */
   highlightPos?: [number, number] | null;
   /** When this changes reference, the map animates to the target position. */
@@ -59,7 +62,17 @@ function computeInitialViewState(bounds: StandardRunData['bounds']): DeckViewSta
   return { target: [cx, cy, 0], zoom };
 }
 
-export function MapCanvas({ data, visibility, colorMap, onHover, onClick, resultPositions, flyTo }: MapCanvasProps) {
+export function MapCanvas({
+  data,
+  visibility,
+  colorMap,
+  onHover,
+  onClick,
+  resultPositions,
+  selectedUnitIds,
+  highlightPos,
+  flyTo,
+}: MapCanvasProps) {
   const [viewState, setViewState] = useState<DeckViewState>(
     () => computeInitialViewState(data.bounds),
   );
@@ -92,11 +105,18 @@ export function MapCanvas({ data, visibility, colorMap, onHover, onClick, result
   // ── Layers ─────────────────────────────────────────────────────────────────
 
   const layers = useMemo(() => {
-    const base = buildAllLayers(data, visibility, colorMap);
-    if (!resultPositions || resultPositions.length === 0) return base;
-    const cl = buildConstellationLayer(resultPositions);
-    return cl ? [...base, cl] : base;
-  }, [data, visibility, colorMap, resultPositions]);
+    const base = buildAllLayers(data, visibility, colorMap, selectedUnitIds);
+    const extras: Layer[] = [];
+    if (resultPositions && resultPositions.length > 0) {
+      const cl = buildConstellationLayer(resultPositions);
+      if (cl) extras.push(cl);
+    }
+    if (highlightPos) {
+      const hl = buildHighlightLayer([highlightPos]);
+      if (hl) extras.push(hl);
+    }
+    return [...base, ...extras];
+  }, [data, visibility, colorMap, selectedUnitIds, resultPositions, highlightPos]);
 
   // ── Pick handler ───────────────────────────────────────────────────────────
 

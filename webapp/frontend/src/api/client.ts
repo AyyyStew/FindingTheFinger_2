@@ -3,6 +3,8 @@ import type {
   KeywordSearchRequest,
   MethodInfo,
   PassageSearchRequest,
+  CompareRequest,
+  CompareResponse,
   SearchResponse,
   SemanticSearchRequest,
   UnitBrief,
@@ -67,4 +69,8 @@ export function searchKeyword(req: KeywordSearchRequest): Promise<SearchResponse
 
 export function searchPassage(req: PassageSearchRequest): Promise<SearchResponse> {
   return post('/api/search/passage', req)
+}
+
+export function compareUnits(req: CompareRequest): Promise<CompareResponse> {
+  return post('/api/units/compare', req)
 }

@@ -68,6 +68,28 @@ class UnitChildPreview(UnitBrief):
 
 
 # ---------------------------------------------------------------------------
+# Comparison
+# ---------------------------------------------------------------------------
+
+class CompareRequest(BaseModel):
+    reference_unit_id: int
+    unit_ids: list[int]
+    method_id: int | None = None
+
+
+class CompareItem(BaseModel):
+    unit: UnitBrief
+    cosine_similarity: float
+    cosine_distance: float
+
+
+class CompareResponse(BaseModel):
+    reference_unit: UnitBrief
+    method_id: int
+    items: list[CompareItem]
+
+
+# ---------------------------------------------------------------------------
 # Search
 # ---------------------------------------------------------------------------
 
