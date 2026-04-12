@@ -64,6 +64,11 @@ export function MapCanvas({ data, visibility, colorMap, onHover, onClick, result
     () => computeInitialViewState(data.bounds),
   );
 
+  // Refit when the dataset (projection) changes.
+  useEffect(() => {
+    setViewState(computeInitialViewState(data.bounds));
+  }, [data]);
+
   // Pan (and optionally zoom) when flyTo changes.
   useEffect(() => {
     if (!flyTo) return;
