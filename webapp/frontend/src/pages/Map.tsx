@@ -2,12 +2,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { compareUnits, fetchCorpora, fetchUnit } from '../api/client';
 import type { CompareResponse, SearchResult } from '../api/types';
+import { MapCanvas, type HoverInfo, type FlyToTarget } from '../components/MapCanvas/MapCanvas';
+import { LayerPanel } from '../components/LayerPanel/LayerPanel';
+import { MapSearchPanel, type MapSearchPanelHandle } from '../components/MapSearchPanel/MapSearchPanel';
+import { MapToolsPanel } from '../components/MapToolsPanel/MapToolsPanel';
+import { UnitCard } from '../components/UnitCard/UnitCard';
 import { useProjectionData } from '../hooks/useProjectionData';
 import {
+  buildUnitCorpusMap,
+  buildUnitPositionMap,
+  buildVisibleCorpusIds,
+  buildVisibleUnitIds,
+  normalizeVisibilityForData,
+  visibleDepthRange as getVisibleDepthRange,
+  visibleHeightRange as getVisibleHeightRange,
+} from '../utils/mapData';
+import {
   buildCorpusColorMap,
-  defaultVisibility,
   type MapVisibility,
 } from '../utils/mapLayers';
+import type { SearchMode } from '../utils/searchModes';
 import {
   isPcaRunData,
   resolvePcaData,
@@ -16,7 +30,9 @@ import {
   type ProjectionMethod,
   type StandardRunData,
   type PcaManifest,
+  type LeafLayerData,
 } from '../utils/projectionLoader';
+import styles from './Map.module.css';
 
 const METHOD_TOOLTIPS: Record<ProjectionMethod, string> = {
   umap:   'UMAP — preserves local neighborhood structure. Best for revealing clusters and local groupings.',
@@ -24,50 +40,6 @@ const METHOD_TOOLTIPS: Record<ProjectionMethod, string> = {
   phate:  'PHATE — diffusion-based geometry. Preserves both local clusters and global continuous trajectories.',
   isomap: 'Isomap — geodesic distances on a manifold. Preserves global curved structure and inter-cluster geometry.',
 };
-import { MapCanvas, type HoverInfo, type FlyToTarget } from '../components/MapCanvas/MapCanvas';
-import { LayerPanel } from '../components/LayerPanel/LayerPanel';
-import { MapSearchPanel, type MapSearchPanelHandle, type SearchMode } from '../components/MapSearchPanel/MapSearchPanel';
-import { MapToolsPanel } from '../components/MapToolsPanel/MapToolsPanel';
-import { UnitCard } from '../components/UnitCard/UnitCard';
-import type { LeafLayerData } from '../utils/projectionLoader';
-import styles from './Map.module.css';
-
-/** Build unitId → [x, y] lookup from all layers in a resolved projection. */
-function buildUnitPositionMap(data: StandardRunData): globalThis.Map<number, [number, number]> {
-  const map = new globalThis.Map<number, [number, number]>();
-  for (const [, layer] of data.layers) {
-    const pos = layer.positions;
-    for (let i = 0; i < layer.count; i++) {
-      map.set(layer.unitIds[i], [pos[i * 2], pos[i * 2 + 1]]);
-    }
-  }
-  for (const [, layer] of data.depthLayers) {
-    const pos = layer.positions;
-    for (let i = 0; i < layer.count; i++) {
-      if (!map.has(layer.unitIds[i])) {
-        map.set(layer.unitIds[i], [pos[i * 2], pos[i * 2 + 1]]);
-      }
-    }
-  }
-  return map;
-}
-
-function buildUnitCorpusMap(data: StandardRunData): globalThis.Map<number, number> {
-  const map = new globalThis.Map<number, number>();
-  for (const [, layer] of data.layers) {
-    for (let i = 0; i < layer.count; i++) {
-      map.set(layer.unitIds[i], layer.corpusIds[i]);
-    }
-  }
-  for (const [, layer] of data.depthLayers) {
-    for (let i = 0; i < layer.count; i++) {
-      if (!map.has(layer.unitIds[i])) {
-        map.set(layer.unitIds[i], layer.corpusIds[i]);
-      }
-    }
-  }
-  return map;
-}
 
 function rgbTupleToCss([r, g, b]: [number, number, number]): string {
   return `rgb(${r}, ${g}, ${b})`;
@@ -76,31 +48,6 @@ function rgbTupleToCss([r, g, b]: [number, number, number]): string {
 /** Pan to a point, preserving the current zoom level. */
 function flyToPoint(x: number, y: number): FlyToTarget {
   return { target: [x, y, 0] };
-}
-
-function normalizeVisibilityForData(
-  current: MapVisibility | null,
-  data: StandardRunData,
-): MapVisibility {
-  const defaults = defaultVisibility(data.manifest.heights, data.manifest.depths);
-  if (!current) return defaults;
-
-  const scatter = { ...defaults.scatter };
-  for (const h of data.manifest.heights) {
-    if (current.scatter[h] != null) scatter[h] = current.scatter[h];
-  }
-
-  const scatterDepth = { ...defaults.scatterDepth };
-  for (const d of data.manifest.depths) {
-    if (current.scatterDepth[d] != null) scatterDepth[d] = current.scatterDepth[d];
-  }
-
-  return {
-    scatterMode: current.scatterMode,
-    scatter,
-    scatterDepth,
-    corpora: current.corpora,
-  };
 }
 
 export function Map() {
@@ -203,64 +150,22 @@ export function Map() {
    */
   const visibleUnitIds = useMemo(() => {
     if (!resolvedData || !resolvedVisibility) return null;
-    const set = new globalThis.Set<number>();
-    const hiddenCorpora = new globalThis.Set(
-      Object.entries(resolvedVisibility.corpora)
-        .filter(([, v]) => !v)
-        .map(([k]) => Number(k)),
-    );
-
-    if (resolvedVisibility.scatterMode === 'height') {
-      for (const [h, layer] of resolvedData.layers) {
-        if (resolvedVisibility.scatter[h] === false) continue;
-        for (let i = 0; i < layer.count; i++) {
-          if (!hiddenCorpora.has(layer.corpusIds[i])) set.add(layer.unitIds[i]);
-        }
-      }
-    } else {
-      for (const [d, layer] of resolvedData.depthLayers) {
-        if (resolvedVisibility.scatterDepth[d] === false) continue;
-        for (let i = 0; i < layer.count; i++) {
-          if (!hiddenCorpora.has(layer.corpusIds[i])) set.add(layer.unitIds[i]);
-        }
-      }
-    }
-    return set;
+    return buildVisibleUnitIds(resolvedData, resolvedVisibility);
   }, [resolvedData, resolvedVisibility]);
 
   const visibleCorpusIds = useMemo(() => {
     if (!resolvedVisibility) return null;
-    return corpora
-      .filter((corpus) => resolvedVisibility.corpora[corpus.id] !== false)
-      .map((corpus) => corpus.id);
+    return buildVisibleCorpusIds(corpora, resolvedVisibility);
   }, [corpora, resolvedVisibility]);
 
   const visibleHeightRange = useMemo(() => {
-    if (!resolvedVisibility || resolvedVisibility.scatterMode !== 'height' || !resolvedData) {
-      return { min: null as number | null, max: null as number | null };
-    }
-    const visibleHeights = resolvedData.manifest.heights.filter((h) => resolvedVisibility.scatter[h] !== false);
-    if (visibleHeights.length === 0) {
-      return { min: null, max: null };
-    }
-    return {
-      min: Math.min(...visibleHeights),
-      max: Math.max(...visibleHeights),
-    };
+    if (!resolvedData || !resolvedVisibility) return { min: null, max: null };
+    return getVisibleHeightRange(resolvedData, resolvedVisibility);
   }, [resolvedData, resolvedVisibility]);
 
   const visibleDepthRange = useMemo(() => {
-    if (!resolvedVisibility || resolvedVisibility.scatterMode !== 'depth' || !resolvedData) {
-      return { min: null as number | null, max: null as number | null };
-    }
-    const visibleDepths = resolvedData.manifest.depths.filter((d) => resolvedVisibility.scatterDepth[d] !== false);
-    if (visibleDepths.length === 0) {
-      return { min: null, max: null };
-    }
-    return {
-      min: Math.min(...visibleDepths),
-      max: Math.max(...visibleDepths),
-    };
+    if (!resolvedData || !resolvedVisibility) return { min: null, max: null };
+    return getVisibleDepthRange(resolvedData, resolvedVisibility);
   }, [resolvedData, resolvedVisibility]);
 
   const searchScatterMode = resolvedVisibility?.scatterMode ?? 'depth';

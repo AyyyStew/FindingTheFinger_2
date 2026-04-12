@@ -1,11 +1,15 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { fetchUnit, searchKeyword, searchPassage, searchSemantic } from '../../api/client';
 import type { CorpusInfo, SearchResult, UnitBrief } from '../../api/types';
+import {
+  SEARCH_MODE_BADGES,
+  SEARCH_MODE_LABELS,
+  SEARCH_MODES,
+  type SearchMode,
+} from '../../utils/searchModes';
 import { getTaxonomyColor } from '../../utils/taxonomyColors';
 import { PassagePicker } from '../PassagePicker/PassagePicker';
 import styles from './MapSearchPanel.module.css';
-
-export type SearchMode = 'semantic' | 'keyword' | 'passage';
 
 const SEARCH_LIMIT = 50; // fetch more so filtering to projection still gives ≥10
 const DISPLAY_LIMIT = 10;
@@ -111,18 +115,6 @@ function ResultRow({ result, showScore, rank, expanded, onToggleExpand, onHover,
     </div>
   );
 }
-
-const MODE_LABELS: Record<SearchMode, string> = {
-  semantic: 'Semantic',
-  keyword:  'Keyword',
-  passage:  'Passage',
-};
-
-const MODE_BADGE: Record<SearchMode, string> = {
-  semantic: 'sem',
-  keyword:  'kw',
-  passage:  'psg',
-};
 
 interface SearchFilters {
   corpus_ids?: number[];
@@ -523,13 +515,13 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
 
         {/* Mode tabs */}
         <div className={styles.tabs}>
-          {(['semantic', 'keyword', 'passage'] as SearchMode[]).map(m => (
+          {SEARCH_MODES.map(m => (
             <button
               key={m}
               className={`${styles.tab} ${mode === m ? styles.tabActive : ''}`}
               onClick={() => handleModeChange(m)}
             >
-              {MODE_LABELS[m]}
+              {SEARCH_MODE_LABELS[m]}
             </button>
           ))}
         </div>
@@ -579,7 +571,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
           <section className={styles.resultsSection}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>Results</span>
-              <span className={styles.modeBadge}>{activeMode ? MODE_BADGE[activeMode] : ''}</span>
+              <span className={styles.modeBadge}>{activeMode ? SEARCH_MODE_BADGES[activeMode] : ''}</span>
               <span className={styles.resultCount}>{activeResults.length}</span>
               <button className={styles.clearBtn} onClick={handleClearResults} title="Clear results">✕</button>
             </div>
@@ -634,7 +626,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
                     className={styles.historyEntry}
                     onClick={() => handleHistoryClick(entry)}
                   >
-                    <span className={styles.historyMode}>{MODE_BADGE[entry.mode]}</span>
+                    <span className={styles.historyMode}>{SEARCH_MODE_BADGES[entry.mode]}</span>
                     <span className={styles.historyLabel}>{entry.label}</span>
                     <span className={styles.historyTime}>{relativeTime(entry.timestamp)}</span>
                   </button>

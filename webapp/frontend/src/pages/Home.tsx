@@ -9,7 +9,8 @@ import {
 import type { SearchResponse, UnitBrief } from '../api/types'
 import { FilterPanel, type Filters } from '../components/FilterPanel/FilterPanel'
 import { ResultCard } from '../components/ResultCard/ResultCard'
-import { SearchBar, type SearchMode } from '../components/SearchBar/SearchBar'
+import { SearchBar } from '../components/SearchBar/SearchBar'
+import type { SearchMode } from '../utils/searchModes'
 import styles from './Home.module.css'
 
 const DEFAULT_FILTERS: Filters = { corpusIds: [], heightMin: 0, heightMax: 0, limit: 10 }

@@ -1,9 +1,8 @@
 import { useRef } from 'react'
 import type { CorpusInfo, UnitBrief } from '../../api/types'
+import { SEARCH_MODE_LABELS, SEARCH_MODES, type SearchMode } from '../../utils/searchModes'
 import { PassagePicker } from '../PassagePicker/PassagePicker'
 import styles from './SearchBar.module.css'
-
-export type SearchMode = 'semantic' | 'keyword' | 'passage'
 
 interface Props {
   mode: SearchMode
@@ -19,12 +18,6 @@ interface Props {
   corpora: CorpusInfo[]
   selectedCorpusIds: number[]
 }
-
-const MODES: { value: SearchMode; label: string }[] = [
-  { value: 'semantic', label: 'Semantic' },
-  { value: 'keyword', label: 'Keyword' },
-  { value: 'passage', label: 'Passage' },
-]
 
 export function SearchBar({
   mode,
@@ -69,7 +62,7 @@ export function SearchBar({
   return (
     <div className={styles.root}>
       <div className={styles.tabs} role="tablist">
-        {MODES.map(({ value, label }) => (
+        {SEARCH_MODES.map((value) => (
           <button
             key={value}
             role="tab"
@@ -77,7 +70,7 @@ export function SearchBar({
             className={`${styles.tab} ${mode === value ? styles.tabActive : ''}`}
             onClick={() => onModeChange(value)}
           >
-            {label}
+            {SEARCH_MODE_LABELS[value]}
           </button>
         ))}
       </div>

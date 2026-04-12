@@ -205,6 +205,19 @@ export function isPcaRunData(d: ProjectionRunData): d is PcaRunData {
  */
 type PcaProjectionLayerData = PcaHeightLayerData | PcaDepthLayerData;
 
+function buildInterleavedPositions(
+  xArr: Float32Array,
+  yArr: Float32Array,
+  count: number,
+): Float32Array {
+  const positions = new Float32Array(count * 2);
+  for (let i = 0; i < count; i++) {
+    positions[i * 2]     = xArr[i];
+    positions[i * 2 + 1] = yArr[i];
+  }
+  return positions;
+}
+
 export function buildPcaPositions(
   layer: PcaProjectionLayerData,
   xPc: number,
@@ -212,12 +225,7 @@ export function buildPcaPositions(
 ): Float32Array {
   const xArr = layer.components[xPc];
   const yArr = layer.components[yPc];
-  const positions = new Float32Array(layer.count * 2);
-  for (let i = 0; i < layer.count; i++) {
-    positions[i * 2]     = xArr[i];
-    positions[i * 2 + 1] = yArr[i];
-  }
-  return positions;
+  return buildInterleavedPositions(xArr, yArr, layer.count);
 }
 
 /**
@@ -330,46 +338,55 @@ export async function fetchDepthBin(
 
 // ── Binary parser ─────────────────────────────────────────────────────────────
 
+function createBinaryReader(buffer: ArrayBuffer) {
+  let byteOffset = 0;
+
+  return {
+    readU32(): number {
+      const value = new DataView(buffer).getUint32(byteOffset, true);
+      byteOffset += 4;
+      return value;
+    },
+    readI32(n: number): Int32Array {
+      const arr = new Int32Array(buffer, byteOffset, n);
+      byteOffset += n * 4;
+      return arr;
+    },
+    readF32(n: number): Float32Array {
+      const arr = new Float32Array(buffer, byteOffset, n);
+      byteOffset += n * 4;
+      return arr;
+    },
+  };
+}
+
 function parseHeightBin(
   buffer: ArrayBuffer,
   height: number,
   manifest: ProjectionManifest,
 ): HeightLayerData | PcaHeightLayerData {
-  const N = new DataView(buffer).getUint32(0, true);
-  let byteOffset = 4;
-
-  const readI32 = (n: number): Int32Array => {
-    const arr = new Int32Array(buffer, byteOffset, n);
-    byteOffset += n * 4;
-    return arr;
-  };
-
-  const readF32 = (n: number): Float32Array => {
-    const arr = new Float32Array(buffer, byteOffset, n);
-    byteOffset += n * 4;
-    return arr;
-  };
-
+  const reader = createBinaryReader(buffer);
+  const N = reader.readU32();
   const K = manifest.n_components;
   const isPca = manifest.method === 'pca';
 
-  const unitIds = readI32(N);
+  const unitIds = reader.readI32(N);
 
   // Read K component columns
   const compCols: Float32Array[] = [];
   for (let k = 0; k < K; k++) {
-    compCols.push(readF32(N));
+    compCols.push(reader.readF32(N));
   }
 
-  const corpusIds = readI32(N);
+  const corpusIds = reader.readI32(N);
 
   if (isPca) {
     // PCA path: return raw components without interleaving
     if (height === 0) {
-      const corpusSeqs = readI32(N);
+      const corpusSeqs = reader.readI32(N);
       const ancestors: Int32Array[] = [];
       for (let h = 1; h <= manifest.max_height; h++) {
-        ancestors.push(readI32(N));
+        ancestors.push(reader.readI32(N));
       }
       return {
         height: 0, count: N, unitIds,
@@ -385,17 +402,13 @@ function parseHeightBin(
   // Standard path: interleave comp_0 and comp_1 as positions
   const x = compCols[0];
   const y = compCols[1];
-  const positions = new Float32Array(N * 2);
-  for (let i = 0; i < N; i++) {
-    positions[i * 2]     = x[i];
-    positions[i * 2 + 1] = y[i];
-  }
+  const positions = buildInterleavedPositions(x, y, N);
 
   if (height === 0) {
-    const corpusSeqs = readI32(N);
+    const corpusSeqs = reader.readI32(N);
     const ancestors: Int32Array[] = [];
     for (let h = 1; h <= manifest.max_height; h++) {
-      ancestors.push(readI32(N));
+      ancestors.push(reader.readI32(N));
     }
     return {
       height: 0, count: N, unitIds,
@@ -416,27 +429,15 @@ function parseDepthBin(
   depth: number,
   manifest: ProjectionManifest,
 ): DepthLayerData | PcaDepthLayerData {
-  const N = new DataView(buffer).getUint32(0, true);
-  let byteOffset = 4;
-
-  const readI32 = (n: number): Int32Array => {
-    const arr = new Int32Array(buffer, byteOffset, n);
-    byteOffset += n * 4;
-    return arr;
-  };
-  const readF32 = (n: number): Float32Array => {
-    const arr = new Float32Array(buffer, byteOffset, n);
-    byteOffset += n * 4;
-    return arr;
-  };
-
+  const reader = createBinaryReader(buffer);
+  const N = reader.readU32();
   const K = manifest.n_components;
   const isPca = manifest.method === 'pca';
 
-  const unitIds = readI32(N);
+  const unitIds = reader.readI32(N);
   const compCols: Float32Array[] = [];
-  for (let k = 0; k < K; k++) compCols.push(readF32(N));
-  const corpusIds = readI32(N);
+  for (let k = 0; k < K; k++) compCols.push(reader.readF32(N));
+  const corpusIds = reader.readI32(N);
 
   if (isPca) {
     return { depth, count: N, unitIds, components: compCols, corpusIds } as PcaDepthLayerData;
@@ -444,11 +445,7 @@ function parseDepthBin(
 
   const x = compCols[0];
   const y = compCols[1];
-  const positions = new Float32Array(N * 2);
-  for (let i = 0; i < N; i++) {
-    positions[i * 2]     = x[i];
-    positions[i * 2 + 1] = y[i];
-  }
+  const positions = buildInterleavedPositions(x, y, N);
   return { depth, count: N, unitIds, positions, corpusIds } as DepthLayerData;
 }
 
