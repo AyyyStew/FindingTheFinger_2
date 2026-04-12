@@ -41,7 +41,7 @@
 }
 
 .selectedPillAccent {
-  width: 3px;
+  width: var(--accent-bar-width);
   align-self: stretch;
   flex-shrink: 0;
   background: var(--tx-solid, var(--color-border));
@@ -69,14 +69,14 @@
 /* ── Clear button (rendered inside UnitCard actions slot or pill) ── */
 .clearBtn {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: var(--icon-lg);
+  height: var(--icon-lg);
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-full);
   color: rgba(224, 92, 92, 0.7);
-  font-size: 20px;
+  font-size: var(--icon-lg);
   font-weight: var(--weight-semibold);
   background: transparent;
   border: none;
@@ -134,7 +134,7 @@
   font-weight: var(--weight-semibold);
   color: var(--color-accent);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-wide);
   position: sticky;
   top: 0;
   background: var(--color-surface);
@@ -164,7 +164,7 @@
 }
 
 .itemAccentBar {
-  width: 3px;
+  width: var(--accent-bar-width);
   flex-shrink: 0;
   background: var(--tx-solid, var(--color-border));
   opacity: 0.7;
@@ -186,7 +186,7 @@
 }
 
 .itemLabel {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: var(--text-base);
   font-weight: var(--weight-medium);
   color: var(--color-text-primary);
@@ -208,7 +208,7 @@
 .itemTaxBadge {
   font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
-  padding: 2px var(--space-2);
+  padding: var(--chip-padding-y) var(--chip-padding-x);
   border-radius: var(--radius-sm);
   background: var(--tx-dim, var(--color-surface-alt));
   color: var(--tx-solid, var(--color-text-secondary));
@@ -219,7 +219,7 @@
 .itemBadge {
   font-size: var(--text-xs);
   font-weight: var(--weight-medium);
-  padding: 2px var(--space-2);
+  padding: var(--chip-padding-y) var(--chip-padding-x);
   border-radius: var(--radius-sm);
   background: var(--color-surface-alt);
   color: var(--color-text-secondary);
@@ -227,7 +227,7 @@
 }
 
 .itemPreview {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
   line-height: var(--leading-relaxed);

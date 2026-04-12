@@ -1,0 +1,115 @@
+.sectionLabel {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-base);
+}
+
+.segmentedControl {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.segmentedControlButton {
+  flex: 1;
+  min-height: var(--control-height-sm);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: background var(--ease-fast), color var(--ease-fast), border-color var(--ease-fast);
+}
+
+.segmentedControlButton:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+}
+
+.segmentedControlButtonActive {
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-focus);
+}
+
+.inputField {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  line-height: var(--leading-normal);
+  transition: border-color var(--ease-fast);
+}
+
+.inputField:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+}
+
+.buttonPrimary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--control-height-md);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background var(--ease-fast), border-color var(--ease-fast), opacity var(--ease-fast);
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.buttonPrimary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.buttonSubtle {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  transition: background var(--ease-fast), color var(--ease-fast), border-color var(--ease-fast);
+}
+
+.buttonSubtle:hover:not(:disabled) {
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+}
+
+.buttonSubtle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chip {
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  padding: var(--chip-padding-y-tight) var(--chip-padding-x-tight);
+  border-radius: var(--radius-sm);
+}
+
+.chipAccent {
+  color: var(--color-accent);
+  background: var(--color-accent-dim);
+}

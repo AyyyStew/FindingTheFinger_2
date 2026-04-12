@@ -1,5 +1,5 @@
 .panel {
-  width: 240px;
+  width: var(--panel-left-width);
   flex-shrink: 0;
   height: 100%;
   overflow-y: auto;
@@ -12,11 +12,9 @@
 }
 
 .title {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
+  composes: sectionLabel from '../../styles/primitives.module.css';
   color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--tracking-wide);
   margin: 0;
 }
 
@@ -46,7 +44,7 @@
   color: var(--color-text-muted);
   cursor: pointer;
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: var(--space-0-5);
   transition: color var(--ease-fast);
 }
 
@@ -54,15 +52,13 @@
   color: var(--color-text-secondary);
 }
 
-/* ── Height (scatter) list ── */
-
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0-5);
 }
 
 .item {
@@ -102,30 +98,24 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Tradition list ── */
-
 .traditionList {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-0-5);
 }
-
-/* ── Shared expand button ── */
 
 .expandBtn {
   background: none;
   border: none;
   padding: 0;
-  width: 14px;
-  font-size: 10px;
+  width: var(--icon-sm);
+  font-size: var(--text-caption);
   color: var(--color-text-muted);
   cursor: pointer;
   flex-shrink: 0;
   line-height: 1;
   text-align: center;
 }
-
-/* ── Shared group label (name + checkbox) ── */
 
 .groupLabel {
   display: flex;
@@ -143,16 +133,12 @@
   white-space: nowrap;
 }
 
-/* ── Solo button ── */
-
 .soloBtn {
-  background: none;
+  composes: chip from '../../styles/primitives.module.css';
+  background: transparent;
   border: none;
-  padding: 1px 3px;
-  font-size: 10px;
   color: var(--color-text-muted);
   cursor: pointer;
-  border-radius: var(--radius-sm);
   flex-shrink: 0;
   opacity: 0;
   transition: opacity var(--ease-fast), color var(--ease-fast), background var(--ease-fast);
@@ -170,8 +156,6 @@
   background: var(--color-accent-dim);
 }
 
-/* ── Level 0: Tradition rows ── */
-
 .traditionBlock {
   display: flex;
   flex-direction: column;
@@ -180,8 +164,8 @@
 .traditionRow {
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px var(--space-1);
+  gap: var(--space-0-75);
+  padding: var(--space-0-5) var(--space-1);
   border-radius: var(--radius-sm);
   transition: background var(--ease-fast);
 }
@@ -202,19 +186,17 @@
   flex-shrink: 0;
 }
 
-/* ── Level 1: Sub-group rows ── */
-
 .subGroupBlock {
   display: flex;
   flex-direction: column;
-  padding-left: 20px;
+  padding-left: var(--space-5);
 }
 
 .subGroupRow {
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px var(--space-1);
+  gap: var(--space-0-75);
+  padding: var(--space-0-5) var(--space-1);
   border-radius: var(--radius-sm);
   transition: background var(--ease-fast);
 }
@@ -227,21 +209,19 @@
   color: var(--color-text-secondary);
 }
 
-/* ── Level 2: Corpus rows ── */
-
 .corpusList {
   list-style: none;
   margin: 0;
-  padding: 0 0 0 20px;
+  padding: 0 0 0 var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-0-5);
 }
 
 .corpusItem {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--space-0-75);
   padding: 1px var(--space-1);
   border-radius: var(--radius-sm);
   transition: background var(--ease-fast);
@@ -268,22 +248,18 @@
   white-space: nowrap;
 }
 
-/* ── Meta ── */
-
 .meta {
   margin-top: auto;
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border-subtle);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0-5);
 }
 
 .metaLabel {
-  font-size: var(--text-xs);
+  composes: sectionLabel from '../../styles/primitives.module.css';
   color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 
 .metaValue {
@@ -294,32 +270,17 @@
   white-space: nowrap;
 }
 
-/* ── Scatter mode toggle (height / depth) ── */
 .modeToggle {
-  display: flex;
-  gap: 2px;
+  composes: segmentedControl from '../../styles/primitives.module.css';
   margin-bottom: var(--space-2);
 }
 
 .modeBtn {
-  flex: 1;
-  padding: 2px 0;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: background var(--ease-fast), color var(--ease-fast);
-}
-
-.modeBtn:hover {
-  background: var(--color-surface-alt);
-  color: var(--color-text-primary);
+  composes: segmentedControlButton from '../../styles/primitives.module.css';
+  min-height: var(--control-height-sm);
+  padding: 0 var(--space-1);
 }
 
 .modeBtnActive {
-  background: var(--color-surface-alt);
-  color: var(--color-text-primary);
-  border-color: var(--color-border-focus);
+  composes: segmentedControlButtonActive from '../../styles/primitives.module.css';
 }

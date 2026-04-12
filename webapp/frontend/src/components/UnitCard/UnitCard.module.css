@@ -46,7 +46,7 @@
 }
 
 .micro .accentBar {
-  width: 3px;
+  width: var(--accent-bar-width);
   opacity: 0.8;
 }
 
@@ -67,7 +67,7 @@
 
 .micro .inner {
   padding: var(--space-2) var(--space-3);
-  gap: 3px;
+  gap: var(--space-0-75);
 }
 
 /* ── Header row ─────────────────────────────────────────────────────────────── */
@@ -92,7 +92,7 @@
 }
 
 .micro .titleGroup {
-  gap: 2px;
+  gap: var(--space-0-5);
 }
 
 .reference {
@@ -154,8 +154,8 @@
 }
 
 .micro .badges {
-  gap: 3px;
-  margin-top: 2px;
+  gap: var(--space-0-75);
+  margin-top: var(--space-0-5);
 }
 
 .taxBadge {
@@ -170,12 +170,12 @@
 .full .taxBadge,
 .compact .taxBadge {
   font-size: var(--text-xs);
-  padding: 2px var(--space-2);
+  padding: var(--chip-padding-y) var(--chip-padding-x);
 }
 
 .micro .taxBadge {
-  font-size: 10px;
-  padding: 1px var(--space-1);
+  font-size: var(--text-caption);
+  padding: var(--chip-padding-y-tight) var(--space-1);
 }
 
 .badge {
@@ -189,12 +189,12 @@
 .full .badge,
 .compact .badge {
   font-size: var(--text-xs);
-  padding: 2px var(--space-2);
+  padding: var(--chip-padding-y) var(--chip-padding-x);
 }
 
 .micro .badge {
-  font-size: 10px;
-  padding: 1px var(--space-1);
+  font-size: var(--text-caption);
+  padding: var(--chip-padding-y-tight) var(--space-1);
 }
 
 /* ── Body text ──────────────────────────────────────────────────────────────── */

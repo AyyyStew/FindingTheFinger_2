@@ -10,7 +10,6 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
 }
 
 body {
@@ -43,7 +42,8 @@ button {
 }
 
 input,
-textarea {
+textarea,
+select {
   font-family: var(--font-sans);
   font-size: var(--text-base);
   color: var(--color-text-primary);
@@ -57,18 +57,26 @@ textarea::placeholder {
   color: var(--color-text-muted);
 }
 
+:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--color-border);
   border-radius: var(--radius-full);
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
 }

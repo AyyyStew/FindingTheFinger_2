@@ -27,26 +27,28 @@
   --color-error-dim:       rgba(224, 92, 92, 0.1);
 
   /* ===== Taxonomy root colors ===== */
-  --tx-abrahamic:          #3B5BA9;
+  --tx-abrahamic:          #3b5ba9;
   --tx-abrahamic-dim:      rgba(59, 91, 169, 0.15);
-  --tx-indic:              #D98C00;
+  --tx-indic:              #d98c00;
   --tx-indic-dim:          rgba(217, 140, 0, 0.15);
-  --tx-east-asian:         #2E8B57;
+  --tx-east-asian:         #2e8b57;
   --tx-east-asian-dim:     rgba(46, 139, 87, 0.15);
   --tx-persian:            #ca3030;
   --tx-persian-dim:        rgba(202, 48, 48, 0.15);
-  --tx-indigenous:         #8B5E3C;
+  --tx-indigenous:         #8b5e3c;
   --tx-indigenous-dim:     rgba(139, 94, 60, 0.15);
-  --tx-ancient:            #6E6E6E;
+  --tx-ancient:            #6e6e6e;
   --tx-ancient-dim:        rgba(110, 110, 110, 0.15);
-  --tx-new-religious:      #A23B72;
+  --tx-new-religious:      #a23b72;
   --tx-new-religious-dim:  rgba(162, 59, 114, 0.15);
-  --tx-other-sacred:       #B59A30;
+  --tx-other-sacred:       #b59a30;
   --tx-other-sacred-dim:   rgba(181, 154, 48, 0.15);
-  --tx-non-sacred:         #4B5563;
+  --tx-non-sacred:         #4b5563;
   --tx-non-sacred-dim:     rgba(75, 85, 99, 0.15);
 
   /* ===== Spacing ===== */
+  --space-0-5: 2px;
+  --space-0-75: 3px;
   --space-1:  4px;
   --space-2:  8px;
   --space-3:  12px;
@@ -62,13 +64,14 @@
   --font-sans:  'Inter', system-ui, -apple-system, sans-serif;
   --font-serif: 'EB Garamond', 'Georgia', serif;
 
-  --text-xs:   0.75rem;    /* 12px */
-  --text-sm:   0.875rem;   /* 14px */
-  --text-base: 1rem;       /* 16px */
-  --text-lg:   1.125rem;   /* 18px */
-  --text-xl:   1.25rem;    /* 20px */
-  --text-2xl:  1.5rem;     /* 24px */
-  --text-3xl:  1.875rem;   /* 30px */
+  --text-caption: 0.6875rem; /* 11px */
+  --text-xs:   0.75rem;      /* 12px */
+  --text-sm:   0.875rem;     /* 14px */
+  --text-base: 1rem;         /* 16px */
+  --text-lg:   1.125rem;     /* 18px */
+  --text-xl:   1.25rem;      /* 20px */
+  --text-2xl:  1.5rem;       /* 24px */
+  --text-3xl:  1.875rem;     /* 30px */
 
   --weight-normal:   400;
   --weight-medium:   500;
@@ -77,6 +80,10 @@
   --leading-tight:   1.25;
   --leading-normal:  1.5;
   --leading-relaxed: 1.7;
+
+  --tracking-tight: 0.02em;
+  --tracking-base: 0.04em;
+  --tracking-wide: 0.06em;
 
   /* ===== Border radius ===== */
   --radius-sm:   4px;
@@ -102,6 +109,28 @@
   --z-tooltip: 300;
 
   /* ===== Layout ===== */
+  --header-height: 52px;
+  --content-offset-top: 72px;
+  --panel-left-width: 240px;
+  --panel-right-width: 340px;
+  --map-mobile-breakpoint: 900px;
   --max-width-content: 800px;
-  --max-width-wide:    1100px;
+  --max-width-wide: 1100px;
+
+  /* ===== Components ===== */
+  --control-height-sm: 28px;
+  --control-height-md: 34px;
+  --control-height-lg: 42px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
+  --textarea-min-home: 80px;
+  --textarea-max-home: 200px;
+  --textarea-min-panel: 56px;
+  --textarea-max-panel: 120px;
+  --chip-padding-y: var(--space-0-5);
+  --chip-padding-x: var(--space-2);
+  --chip-padding-y-tight: 1px;
+  --chip-padding-x-tight: 5px;
+  --accent-bar-width: 3px;
 }

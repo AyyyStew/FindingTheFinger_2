@@ -1,20 +1,17 @@
-/* Full viewport minus the sticky header (52px) */
 .layout {
   display: flex;
-  height: calc(100vh - 52px);
+  height: calc(100vh - var(--header-height));
   overflow: hidden;
 }
 
-/* ── Left sidebar placeholder (while data loads) ── */
 .layerPanelPlaceholder {
-  width: 240px;
+  width: var(--panel-left-width);
   flex-shrink: 0;
   height: 100%;
   background: var(--color-surface);
   border-right: 1px solid var(--color-border-subtle);
 }
 
-/* ── Canvas area ── */
 .canvasWrap {
   position: relative;
   flex: 1;
@@ -24,7 +21,6 @@
   flex-direction: column;
 }
 
-/* ── Method selector toolbar ── */
 .toolbar {
   flex-shrink: 0;
   display: flex;
@@ -47,32 +43,18 @@
 }
 
 .methodBtn {
+  composes: segmentedControlButton from '../styles/primitives.module.css';
   padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition: background var(--ease-fast), color var(--ease-fast), border-color var(--ease-fast);
-}
-
-.methodBtn:hover {
-  background: var(--color-surface-alt);
-  color: var(--color-text-primary);
 }
 
 .methodBtnActive {
-  background: var(--color-surface-alt);
-  color: var(--color-text-primary);
-  border-color: var(--color-border-focus);
+  composes: segmentedControlButtonActive from '../styles/primitives.module.css';
 }
 
 .methodTooltip {
   display: none;
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + var(--space-1));
   left: 50%;
   transform: translateX(-50%);
   width: 220px;
@@ -83,8 +65,8 @@
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
-  line-height: 1.5;
-  z-index: 100;
+  line-height: var(--leading-normal);
+  z-index: var(--z-overlay);
   pointer-events: none;
 }
 
@@ -92,7 +74,6 @@
   display: block;
 }
 
-/* ── PCA axis selectors ── */
 .pcaSelectors {
   display: flex;
   align-items: center;
@@ -112,7 +93,8 @@
 }
 
 .pcaSelect {
-  padding: 2px var(--space-2);
+  min-height: var(--control-height-sm);
+  padding: var(--space-0-5) var(--space-2);
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: var(--color-surface);
@@ -121,9 +103,8 @@
   cursor: pointer;
 }
 
-/* ── Right sidebar ── */
 .rightPanel {
-  width: 340px;
+  width: var(--panel-right-width);
   flex-shrink: 0;
   height: 100%;
   background: var(--color-surface);
@@ -134,8 +115,8 @@
 }
 
 .rightPanelTabs {
-  display: flex;
-  gap: 2px;
+  composes: segmentedControl from '../styles/primitives.module.css';
+  gap: var(--space-0-5);
   padding: var(--space-2);
   border-bottom: 1px solid var(--color-border-subtle);
   flex-shrink: 0;
@@ -143,27 +124,11 @@
 }
 
 .rightPanelTab {
-  flex: 1;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition: background var(--ease-fast), color var(--ease-fast), border-color var(--ease-fast);
-}
-
-.rightPanelTab:hover {
-  background: var(--color-surface-alt);
-  color: var(--color-text-secondary);
+  composes: segmentedControlButton from '../styles/primitives.module.css';
 }
 
 .rightPanelTabActive {
-  background: var(--color-surface-alt);
-  color: var(--color-text-primary);
-  border-color: var(--color-border-focus);
+  composes: segmentedControlButtonActive from '../styles/primitives.module.css';
 }
 
 .rightPanelBody {
@@ -178,7 +143,6 @@
   min-height: 0;
 }
 
-/* ── Canvas inner (fills remaining space after toolbar) ── */
 .canvasInner {
   flex: 1;
   min-height: 0;
@@ -203,15 +167,8 @@
 }
 
 .overlayBtn {
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  transition: background var(--ease-fast), color var(--ease-fast), border-color var(--ease-fast);
+  composes: buttonSubtle from '../styles/primitives.module.css';
+  border-color: transparent;
 }
 
 .overlayBtn:hover {
@@ -233,13 +190,14 @@
 .overlayDepthGroup {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-0-5);
   padding-left: var(--space-1);
   border-left: 1px solid var(--color-border-subtle);
 }
 
 .overlaySelect {
   max-width: 108px;
+  min-height: var(--control-height-sm);
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -253,15 +211,13 @@
   cursor: not-allowed;
 }
 
-/* ── Loading / error states ── */
 .centred {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: calc(100vh - 52px);
+  height: calc(100vh - var(--header-height));
 }
 
-/* centred inside canvasInner fills the inner area */
 .canvasInner .centred {
   height: 100%;
 }
@@ -269,7 +225,7 @@
 .loadingText {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-  letter-spacing: 0.03em;
+  letter-spacing: var(--tracking-tight);
 }
 
 .errorText {
@@ -277,9 +233,6 @@
   color: var(--color-error);
 }
 
-/* ── Hover tooltip ── */
-
-/* Outer wrapper: just positioning. UnitCard micro handles its own border/shadow. */
 .tooltipWrap {
   position: absolute;
   pointer-events: none;
@@ -287,7 +240,6 @@
   max-width: 260px;
 }
 
-/* Loading skeleton shown before unit data arrives */
 .tooltipSkeleton {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -299,14 +251,13 @@
   white-space: nowrap;
 }
 
-/* First-leaf preview section (non-leaf hovers, passed as UnitCard children) */
 .leafPreview {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0-5);
   border-top: 1px solid var(--color-border-subtle);
-  padding-top: 4px;
-  margin-top: 2px;
+  padding-top: var(--space-1);
+  margin-top: var(--space-0-5);
 }
 
 .leafRef {
@@ -326,4 +277,64 @@
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.mobileFallback {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    display: none;
+  }
+
+  .mobileFallback {
+    display: flex;
+    min-height: calc(100vh - var(--header-height));
+    padding: var(--space-8) var(--space-4);
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobileFallbackCard {
+    width: 100%;
+    max-width: 420px;
+    padding: var(--space-5);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .mobileFallbackKicker {
+    font-size: var(--text-xs);
+    color: var(--color-accent);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-base);
+    font-weight: var(--weight-semibold);
+  }
+
+  .mobileFallbackTitle {
+    font-size: var(--text-xl);
+    font-family: var(--font-serif);
+    color: var(--color-text-primary);
+  }
+
+  .mobileFallbackBody {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    line-height: var(--leading-normal);
+  }
+
+  .mobileFallbackCta {
+    align-self: flex-start;
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    color: var(--color-accent);
+    background: var(--color-accent-dim);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+  }
 }

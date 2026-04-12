@@ -431,21 +431,34 @@ export function Map() {
     : null;
 
   return (
-    <div className={styles.layout}>
-      {/* Left sidebar */}
-      {resolvedData && resolvedVisibility ? (
-        <LayerPanel
-          manifest={resolvedData.manifest}
-          corpora={corpora}
-          visibility={resolvedVisibility}
-          onChange={setVisibility}
-        />
-      ) : (
-        <aside className={styles.layerPanelPlaceholder} />
-      )}
+    <>
+      <section className={styles.mobileFallback} aria-label="Map screen size notice">
+        <div className={styles.mobileFallbackCard}>
+          <span className={styles.mobileFallbackKicker}>Map view</span>
+          <h2 className={styles.mobileFallbackTitle}>Best experienced on larger screens</h2>
+          <p className={styles.mobileFallbackBody}>
+            The full projection map includes high-density WebGL rendering and multi-panel controls.
+            For smooth exploration, open this page on tablet, laptop, or desktop.
+          </p>
+          <span className={styles.mobileFallbackCta}>Use a larger screen for full map tools</span>
+        </div>
+      </section>
 
-      {/* Main canvas */}
-      <div className={styles.canvasWrap}>
+      <div className={styles.layout}>
+        {/* Left sidebar */}
+        {resolvedData && resolvedVisibility ? (
+          <LayerPanel
+            manifest={resolvedData.manifest}
+            corpora={corpora}
+            visibility={resolvedVisibility}
+            onChange={setVisibility}
+          />
+        ) : (
+          <aside className={styles.layerPanelPlaceholder} />
+        )}
+
+        {/* Main canvas */}
+        <div className={styles.canvasWrap}>
         {/* Method selector toolbar */}
         <div className={styles.toolbar}>
           <div className={styles.methodSelector}>
@@ -610,10 +623,10 @@ export function Map() {
             </>
           )}
         </div>
-      </div>
+        </div>
 
-      {/* Right sidebar — search */}
-      <aside className={styles.rightPanel}>
+        {/* Right sidebar — search */}
+        <aside className={styles.rightPanel}>
         <div className={styles.rightPanelTabs} role="tablist" aria-label="Map side panel">
           <button
             type="button"
@@ -677,7 +690,8 @@ export function Map() {
             />
           </section>
         </div>
-      </aside>
-    </div>
+        </aside>
+      </div>
+    </>
   );
 }
