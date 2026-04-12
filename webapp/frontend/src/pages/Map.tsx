@@ -78,6 +78,31 @@ function flyToPoint(x: number, y: number): FlyToTarget {
   return { target: [x, y, 0] };
 }
 
+function normalizeVisibilityForData(
+  current: MapVisibility | null,
+  data: StandardRunData,
+): MapVisibility {
+  const defaults = defaultVisibility(data.manifest.heights, data.manifest.depths);
+  if (!current) return defaults;
+
+  const scatter = { ...defaults.scatter };
+  for (const h of data.manifest.heights) {
+    if (current.scatter[h] != null) scatter[h] = current.scatter[h];
+  }
+
+  const scatterDepth = { ...defaults.scatterDepth };
+  for (const d of data.manifest.depths) {
+    if (current.scatterDepth[d] != null) scatterDepth[d] = current.scatterDepth[d];
+  }
+
+  return {
+    scatterMode: current.scatterMode,
+    scatter,
+    scatterDepth,
+    corpora: current.corpora,
+  };
+}
+
 export function Map() {
   const [method, setMethod] = useState<ProjectionMethod>('umap');
   const [rightPanelTab, setRightPanelTab] = useState<'search' | 'tools'>('search');
@@ -108,17 +133,15 @@ export function Map() {
   }, [projData, xPc, yPc]);
 
   const resolvedVisibility = useMemo(() => {
-    if (visibility) return visibility;
     if (!resolvedData) return null;
-    return defaultVisibility(resolvedData.manifest.heights, resolvedData.manifest.depths);
+    return normalizeVisibilityForData(visibility, resolvedData);
   }, [visibility, resolvedData]);
 
-  // Reset visibility + search results when method changes.
+  // Reset embedding-specific selections + search results when method changes.
   const handleMethodChange = (next: ProjectionMethod) => {
     setMethod(next);
     setXPc(0);
     setYPc(1);
-    setVisibility(null);
     setHighlightPos(null);
     setSearchResults(null);
     setAnchorUnitId(null);
