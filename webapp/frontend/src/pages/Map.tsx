@@ -19,6 +19,10 @@ import {
 } from '../utils/mapData';
 import {
   buildCorpusColorMap,
+  buildCorpusLabelMap,
+  DEFAULT_OVERLAY_OPTIONS,
+  type KdeBreakdown,
+  type MapOverlayOptions,
   type MapVisibility,
 } from '../utils/mapLayers';
 import type { SearchMode } from '../utils/searchModes';
@@ -41,6 +45,12 @@ const METHOD_TOOLTIPS: Record<ProjectionMethod, string> = {
   isomap: 'Isomap — geodesic distances on a manifold. Preserves global curved structure and inter-cluster geometry.',
 };
 
+const KDE_BREAKDOWN_LABELS: Record<KdeBreakdown, string> = {
+  overall: 'whole view',
+  corpus: 'by corpus',
+  level: 'by level',
+};
+
 function rgbTupleToCss([r, g, b]: [number, number, number]): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
@@ -53,6 +63,7 @@ function flyToPoint(x: number, y: number): FlyToTarget {
 export function Map() {
   const [method, setMethod] = useState<ProjectionMethod>('umap');
   const [rightPanelTab, setRightPanelTab] = useState<'search' | 'tools'>('search');
+  const [overlays, setOverlays] = useState<MapOverlayOptions>(DEFAULT_OVERLAY_OPTIONS);
 
   // PCA axis selection (0-indexed component indices)
   const [xPc, setXPc] = useState(0);
@@ -67,6 +78,7 @@ export function Map() {
   });
 
   const colorMap = useMemo(() => buildCorpusColorMap(corpora), [corpora]);
+  const corpusLabelMap = useMemo(() => buildCorpusLabelMap(corpora), [corpora]);
 
   const [visibility, setVisibility] = useState<MapVisibility | null>(null);
 
@@ -84,6 +96,20 @@ export function Map() {
     return normalizeVisibilityForData(visibility, resolvedData);
   }, [visibility, resolvedData]);
 
+  const labelDepths = useMemo(() => {
+    if (!resolvedData) return [];
+    return [...resolvedData.depthLayers.keys()]
+      .filter(depth => {
+        const layer = resolvedData.depthLayers.get(depth);
+        if (!layer) return false;
+        for (let i = 0; i < layer.count; i++) {
+          if (resolvedData.unitLabels[String(layer.unitIds[i])]) return true;
+        }
+        return false;
+      })
+      .sort((a, b) => a - b);
+  }, [resolvedData]);
+
   // Reset embedding-specific selections + search results when method changes.
   const handleMethodChange = (next: ProjectionMethod) => {
     setMethod(next);
@@ -93,6 +119,27 @@ export function Map() {
     setSearchResults(null);
     setAnchorUnitId(null);
   };
+
+  const toggleOverlay = useCallback((key: 'voronoi' | 'kde' | 'labels' | 'hidePoints') => {
+    setOverlays(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const setKdeBreakdown = useCallback((kdeBreakdown: KdeBreakdown) => {
+    setOverlays(prev => ({ ...prev, kdeBreakdown }));
+  }, []);
+
+  const toggleLabelDepth = useCallback((depth: number) => {
+    setOverlays(prev => {
+      const labelDepths = prev.labelDepths.includes(depth)
+        ? prev.labelDepths.filter(d => d !== depth)
+        : [...prev.labelDepths, depth].sort((a, b) => a - b);
+      return { ...prev, labelDepths };
+    });
+  }, []);
+
+  const toggleCorpusLabels = useCallback(() => {
+    setOverlays(prev => ({ ...prev, labelCorpus: !prev.labelCorpus }));
+  }, []);
 
   const [hover, setHover] = useState<HoverInfo | null>(null);
 
@@ -457,11 +504,75 @@ export function Map() {
             </div>
           ) : (
             <>
+              <div className={styles.overlayToolbar} aria-label="Map view overlays">
+                <button
+                  type="button"
+                  className={`${styles.overlayBtn} ${overlays.voronoi ? styles.overlayBtnActive : ''}`}
+                  onClick={() => toggleOverlay('voronoi')}
+                >
+                  Voronoi
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.overlayBtn} ${overlays.kde ? styles.overlayBtnActive : ''}`}
+                  onClick={() => toggleOverlay('kde')}
+                >
+                  KDE
+                </button>
+                <select
+                  className={styles.overlaySelect}
+                  value={overlays.kdeBreakdown}
+                  onChange={e => setKdeBreakdown(e.target.value as KdeBreakdown)}
+                  disabled={!overlays.kde}
+                  aria-label="KDE breakdown"
+                >
+                  {Object.entries(KDE_BREAKDOWN_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className={`${styles.overlayBtn} ${overlays.labels ? styles.overlayBtnActive : ''}`}
+                  onClick={() => toggleOverlay('labels')}
+                >
+                  Labels
+                </button>
+                <div className={styles.overlayDepthGroup} aria-label="Label depths">
+                  <button
+                    type="button"
+                    className={`${styles.overlayBtn} ${overlays.labelCorpus ? styles.overlayBtnActive : ''}`}
+                    onClick={toggleCorpusLabels}
+                    disabled={!overlays.labels}
+                  >
+                    corpus
+                  </button>
+                  {labelDepths.map(depth => (
+                      <button
+                        key={depth}
+                        type="button"
+                        className={`${styles.overlayBtn} ${overlays.labelDepths.includes(depth) ? styles.overlayBtnActive : ''}`}
+                        onClick={() => toggleLabelDepth(depth)}
+                        disabled={!overlays.labels}
+                      >
+                        d{depth}
+                      </button>
+                    ))}
+                </div>
+                <button
+                  type="button"
+                  className={`${styles.overlayBtn} ${overlays.hidePoints ? styles.overlayBtnActive : ''}`}
+                  onClick={() => toggleOverlay('hidePoints')}
+                >
+                  Hide points
+                </button>
+              </div>
               <MapCanvas
                 key={method}
                 data={resolvedData}
                 visibility={resolvedVisibility}
                 colorMap={colorMap}
+                corpusLabelMap={corpusLabelMap}
+                overlays={overlays}
                 onHover={setHover}
                 onClick={handleMapClick}
                 resultPositions={visibleResultPositions}

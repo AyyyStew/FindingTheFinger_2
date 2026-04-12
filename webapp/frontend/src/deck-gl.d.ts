@@ -30,4 +30,10 @@ declare module '@deck.gl/layers' {
   export class LineLayer {
     constructor(props: Record<string, unknown>);
   }
+  export class SolidPolygonLayer {
+    constructor(props: Record<string, unknown>);
+  }
+  export class TextLayer {
+    constructor(props: Record<string, unknown>);
+  }
 }

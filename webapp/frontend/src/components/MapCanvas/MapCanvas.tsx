@@ -7,8 +7,11 @@ import {
   buildAllLayers,
   buildHighlightLayer,
   buildConstellationLayer,
+  DEFAULT_OVERLAY_OPTIONS,
   type MapVisibility,
+  type MapOverlayOptions,
   type CorpusColorMap,
+  type CorpusLabelMap,
 } from '../../utils/mapLayers';
 import styles from './MapCanvas.module.css';
 
@@ -39,6 +42,7 @@ interface MapCanvasProps {
   data: StandardRunData;
   visibility: MapVisibility;
   colorMap: CorpusColorMap;
+  corpusLabelMap: CorpusLabelMap;
   onHover: (info: HoverInfo | null) => void;
   onClick?: (info: HoverInfo) => void;
   /** Positions (up to 10) of search result units. Index 0 = hub/anchor. */
@@ -53,6 +57,8 @@ interface MapCanvasProps {
   highlightPos?: [number, number] | null;
   /** When this changes reference, the map animates to the target position. */
   flyTo?: FlyToTarget | null;
+  /** Optional derived views drawn against the current visible point layer(s). */
+  overlays?: MapOverlayOptions;
 }
 
 function computeInitialViewState(bounds: StandardRunData['bounds']): DeckViewState {
@@ -70,6 +76,7 @@ export function MapCanvas({
   data,
   visibility,
   colorMap,
+  corpusLabelMap,
   onHover,
   onClick,
   resultPositions,
@@ -78,6 +85,7 @@ export function MapCanvas({
   selectedHoverPosition,
   highlightPos,
   flyTo,
+  overlays = DEFAULT_OVERLAY_OPTIONS,
 }: MapCanvasProps) {
   const [viewState, setViewState] = useState<DeckViewState>(
     () => computeInitialViewState(data.bounds),
@@ -131,7 +139,7 @@ export function MapCanvas({
   // ── Layers ─────────────────────────────────────────────────────────────────
 
   const layers = useMemo(() => {
-    const base = buildAllLayers(data, visibility, colorMap, selectedUnitIds);
+    const base = buildAllLayers(data, visibility, colorMap, corpusLabelMap, selectedUnitIds, overlays);
     const extras: Layer[] = [];
     if (resultPositions && resultPositions.length > 0) {
       const cl = buildConstellationLayer(resultPositions);
@@ -159,7 +167,9 @@ export function MapCanvas({
     data,
     visibility,
     colorMap,
+    corpusLabelMap,
     selectedUnitIds,
+    overlays,
     selectedPositions,
     selectedHoverPosition,
     selectedHoverFillAlpha,
