@@ -67,7 +67,7 @@ function computeInitialViewState(bounds: StandardRunData['bounds']): DeckViewSta
   const rangeX = bounds.maxX - bounds.minX;
   const rangeY = bounds.maxY - bounds.minY;
   const maxRange = Math.max(rangeX, rangeY, 0.1);
-  const viewportSize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
+  const viewportSize = Math.min(window.innerWidth, window.innerHeight) * 0.7;
   const zoom = Math.log2(viewportSize / maxRange);
   return { target: [cx, cy, 0], zoom };
 }

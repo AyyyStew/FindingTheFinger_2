@@ -515,14 +515,26 @@ function visibleLayerPoints(
   return points;
 }
 
-function boundsBox(data: StandardRunData): [number, number, number, number] {
-  const padX = Math.max((data.bounds.maxX - data.bounds.minX) * 0.04, 0.01);
-  const padY = Math.max((data.bounds.maxY - data.bounds.minY) * 0.04, 0.01);
+function boundsBox(data: StandardRunData, padFraction = 0.04): [number, number, number, number] {
+  const padX = Math.max((data.bounds.maxX - data.bounds.minX) * padFraction, 0.01);
+  const padY = Math.max((data.bounds.maxY - data.bounds.minY) * padFraction, 0.01);
   return [
     data.bounds.minX - padX,
     data.bounds.minY - padY,
     data.bounds.maxX + padX,
     data.bounds.maxY + padY,
+  ];
+}
+
+function kdeBoundsBox(data: StandardRunData): [number, number, number, number] {
+  const rangeX = data.bounds.maxX - data.bounds.minX;
+  const rangeY = data.bounds.maxY - data.bounds.minY;
+  const pad = Math.max(Math.max(rangeX, rangeY) * 0.18, 0.01);
+  return [
+    data.bounds.minX - pad,
+    data.bounds.minY - pad,
+    data.bounds.maxX + pad,
+    data.bounds.maxY + pad,
   ];
 }
 
@@ -653,17 +665,19 @@ export function buildKdeCloudLayers(
 ): Layer[] {
   const layers = visiblePointLayers(data, visibility);
   const hiddenCorpora = hiddenCorpusSet(visibility);
-  const [minX, minY, maxX, maxY] = boundsBox(data);
+  const [minX, minY, maxX, maxY] = kdeBoundsBox(data);
   const width = maxX - minX;
   const height = maxY - minY;
   const grid = 48;
   const cellW = width / grid;
   const cellH = height / grid;
-  const bandwidth = Math.max(width, height) / 18;
+  const dataWidth = data.bounds.maxX - data.bounds.minX;
+  const dataHeight = data.bounds.maxY - data.bounds.minY;
+  const bandwidth = Math.max(dataWidth, dataHeight) / 18;
   const bandwidthSq = bandwidth * bandwidth;
   const radiusSq = bandwidthSq * 9;
   const cacheKey = [
-    'kde-v1',
+    'kde-v2',
     dataCachePrefix(data),
     visibility.scatterMode,
     breakdown,
