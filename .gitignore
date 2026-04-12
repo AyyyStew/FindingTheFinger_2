@@ -25,6 +25,7 @@ webapp/frontend/.vite/
 
 # ===== Data =====
 data/
+*.pkl
 *.sqlite
 *.db
 *.sqldata
