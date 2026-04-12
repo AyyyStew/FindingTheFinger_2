@@ -161,6 +161,7 @@ export function Map() {
   const [compareResult, setCompareResult] = useState<CompareResponse | null>(null);
   const [isComparing, setIsComparing] = useState(false);
   const [compareError, setCompareError] = useState<string | null>(null);
+  const [compareHoverUnitId, setCompareHoverUnitId] = useState<number | null>(null);
 
   /** Map from unitId → [x, y] built once from all height+depth layers. */
   const unitPositionMap = useMemo(
@@ -263,6 +264,21 @@ export function Map() {
   const visibleResultPositions = rightPanelTab === 'search' ? resultPositions : null;
 
   const compareSelectionSet = useMemo(() => new globalThis.Set(compareSelectionIds), [compareSelectionIds]);
+  const compareSelectionPositions = useMemo(() => {
+    const positions: [number, number][] = [];
+    for (const unitId of compareSelectionIds) {
+      if (unitId === compareHoverUnitId) continue;
+      const pos = unitPositionMap.get(unitId);
+      if (pos) positions.push(pos);
+    }
+    return positions;
+  }, [compareHoverUnitId, compareSelectionIds, unitPositionMap]);
+
+  const compareHoverPosition = useMemo(() => {
+    if (compareHoverUnitId == null || !compareSelectionIds.includes(compareHoverUnitId)) return null;
+    return unitPositionMap.get(compareHoverUnitId) ?? null;
+  }, [compareHoverUnitId, compareSelectionIds, unitPositionMap]);
+
   const selectedUnitQueries = useQueries({
     queries: compareSelectionIds.map(unitId => ({
       queryKey: ['unit', unitId],
@@ -377,6 +393,7 @@ export function Map() {
     setCompareReferenceId(null);
     setCompareResult(null);
     setCompareError(null);
+    setCompareHoverUnitId(null);
   }, []);
 
   const handleRemoveSelection = useCallback((unitId: number) => {
@@ -384,6 +401,7 @@ export function Map() {
       const next = prev.filter(id => id !== unitId);
       setCompareResult(null);
       setCompareError(null);
+      setCompareHoverUnitId(current => current === unitId ? null : current);
       setCompareReferenceId(current => {
         if (current !== unitId) return current;
         return next[0] ?? null;
@@ -391,6 +409,11 @@ export function Map() {
       return next;
     });
   }, []);
+
+  const handleZoomToSelection = useCallback((unitId: number) => {
+    const pos = unitPositionMap.get(unitId);
+    if (pos) setFlyTo({ target: [pos[0], pos[1], 0], zoom: 8 });
+  }, [unitPositionMap]);
 
   const selectedUnitLabels = useMemo(() => {
     const labels: Record<number, string | null> = {};
@@ -515,6 +538,8 @@ export function Map() {
                 onClick={handleMapClick}
                 resultPositions={visibleResultPositions}
                 selectedUnitIds={rightPanelTab === 'tools' ? compareSelectionSet : null}
+                selectedPositions={rightPanelTab === 'tools' ? compareSelectionPositions : null}
+                selectedHoverPosition={rightPanelTab === 'tools' ? compareHoverPosition : null}
                 highlightPos={highlightPos}
                 flyTo={flyTo}
               />
@@ -608,6 +633,8 @@ export function Map() {
               compareResult={compareResult}
               onClearSelection={handleClearSelection}
               onReferenceChange={handleReferenceChange}
+              onZoomToSelection={handleZoomToSelection}
+              onSelectionHover={setCompareHoverUnitId}
               onRemoveSelection={handleRemoveSelection}
             />
           </section>

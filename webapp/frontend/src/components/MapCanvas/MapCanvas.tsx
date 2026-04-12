@@ -45,6 +45,10 @@ interface MapCanvasProps {
   resultPositions?: [number, number][] | null;
   /** Selected comparison unit IDs shown in tools mode. */
   selectedUnitIds?: Set<number> | null;
+  /** Selected comparison positions rendered above the scatterplot. */
+  selectedPositions?: [number, number][] | null;
+  /** Selected comparison position currently hovered in the tools table. */
+  selectedHoverPosition?: [number, number] | null;
   /** When set, shows a pulsing highlight ring at this map position (result card hover). */
   highlightPos?: [number, number] | null;
   /** When this changes reference, the map animates to the target position. */
@@ -70,12 +74,16 @@ export function MapCanvas({
   onClick,
   resultPositions,
   selectedUnitIds,
+  selectedPositions,
+  selectedHoverPosition,
   highlightPos,
   flyTo,
 }: MapCanvasProps) {
   const [viewState, setViewState] = useState<DeckViewState>(
     () => computeInitialViewState(data.bounds),
   );
+
+  const [selectedHoverFillAlpha, setSelectedHoverFillAlpha] = useState(0);
 
   // Refit when the dataset (projection) changes.
   useEffect(() => {
@@ -92,6 +100,24 @@ export function MapCanvas({
       transitionDuration: 250,
     }));
   }, [flyTo]);
+
+  useEffect(() => {
+    if (!selectedHoverPosition) {
+      setSelectedHoverFillAlpha(0);
+      return;
+    }
+
+    let frame = 0;
+    const startedAt = performance.now();
+    const tick = (now: number) => {
+      const phase = ((now - startedAt) / 1950) * Math.PI * 2;
+      setSelectedHoverFillAlpha(Math.round((Math.cos(phase) + 1) * 87.5));
+      frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [selectedHoverPosition]);
 
   const handleViewStateChange = useCallback(
     ({ viewState: vs }: { viewState: object }) => {
@@ -111,12 +137,35 @@ export function MapCanvas({
       const cl = buildConstellationLayer(resultPositions);
       if (cl) extras.push(cl);
     }
+    if (selectedPositions && selectedPositions.length > 0) {
+      const sl = buildHighlightLayer(selectedPositions, 'selected-comparison-highlight', 9);
+      if (sl) extras.push(sl);
+    }
+    if (selectedHoverPosition) {
+      const shl = buildHighlightLayer(
+        [selectedHoverPosition],
+        'selected-comparison-hover-highlight',
+        9,
+        selectedHoverFillAlpha,
+      );
+      if (shl) extras.push(shl);
+    }
     if (highlightPos) {
       const hl = buildHighlightLayer([highlightPos]);
       if (hl) extras.push(hl);
     }
     return [...base, ...extras];
-  }, [data, visibility, colorMap, selectedUnitIds, resultPositions, highlightPos]);
+  }, [
+    data,
+    visibility,
+    colorMap,
+    selectedUnitIds,
+    selectedPositions,
+    selectedHoverPosition,
+    selectedHoverFillAlpha,
+    resultPositions,
+    highlightPos,
+  ]);
 
   // ── Pick handler ───────────────────────────────────────────────────────────
 

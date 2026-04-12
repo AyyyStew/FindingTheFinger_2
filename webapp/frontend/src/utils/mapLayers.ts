@@ -237,7 +237,12 @@ export function buildDepthScatterLayers(
 /**
  * Subtle gold cue for search result hover / focus.
  */
-export function buildHighlightLayer(positions: [number, number][]): Layer | null {
+export function buildHighlightLayer(
+  positions: [number, number][],
+  id = 'search-highlight',
+  radiusMinPixels = HIGHLIGHT_RADIUS_PX,
+  fillAlpha = 175,
+): Layer | null {
   if (positions.length === 0) return null;
   const count = positions.length;
   const posArr = new Float32Array(count * 2);
@@ -246,19 +251,18 @@ export function buildHighlightLayer(positions: [number, number][]): Layer | null
   for (let i = 0; i < count; i++) {
     posArr[i * 2]     = positions[i][0];
     posArr[i * 2 + 1] = positions[i][1];
-    // Gold fill: #c9a96e
-    fillColors[i * 4]     = 201;
-    fillColors[i * 4 + 1] = 169;
-    fillColors[i * 4 + 2] = 110;
-    fillColors[i * 4 + 3] = 160;
-    // Soft outline
+    // Dark fill with a gold outline keeps selected points visible on dense scatter.
+    fillColors[i * 4]     = 0;
+    fillColors[i * 4 + 1] = 0;
+    fillColors[i * 4 + 2] = 0;
+    fillColors[i * 4 + 3] = fillAlpha;
     lineColors[i * 4]     = 201;
     lineColors[i * 4 + 1] = 169;
     lineColors[i * 4 + 2] = 110;
-    lineColors[i * 4 + 3] = 220;
+    lineColors[i * 4 + 3] = 255;
   }
   return new ScatterplotLayer({
-    id: 'search-highlight',
+    id,
     data: {
       length: count,
       attributes: {
@@ -269,7 +273,7 @@ export function buildHighlightLayer(positions: [number, number][]): Layer | null
     },
     getRadius: 4.5,
     radiusUnits: 'pixels',
-    radiusMinPixels: HIGHLIGHT_RADIUS_PX,
+    radiusMinPixels,
     billboard: true,
     pickable: false,
     stroked: true,

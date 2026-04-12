@@ -73,7 +73,7 @@
 
 .rowActions {
   display: grid;
-  grid-template-columns: 52px 22px;
+  grid-template-columns: 52px 22px 22px;
   align-items: center;
   gap: var(--space-1);
   flex-shrink: 0;
@@ -114,12 +114,29 @@
   height: 22px;
   padding: 0;
   line-height: 1;
-  border-color: rgba(214, 69, 65, 0.45);
-  color: var(--color-error);
   font-weight: var(--weight-semibold);
 }
 
-.iconBtn:hover {
+.iconBtn svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  vertical-align: middle;
+}
+
+.zoomBtn:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+}
+
+.removeBtn {
+  border-color: rgba(214, 69, 65, 0.45);
+  color: var(--color-error);
+}
+
+.removeBtn:hover {
   background: rgba(214, 69, 65, 0.12);
   border-color: var(--color-error);
   color: var(--color-error);

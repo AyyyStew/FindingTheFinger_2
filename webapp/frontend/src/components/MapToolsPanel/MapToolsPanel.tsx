@@ -11,6 +11,8 @@ interface Props {
   compareResult: { reference_unit: UnitBrief; items: CompareItem[] } | null;
   onClearSelection: () => void;
   onReferenceChange: (unitId: number) => void;
+  onZoomToSelection: (unitId: number) => void;
+  onSelectionHover: (unitId: number | null) => void;
   onRemoveSelection: (unitId: number) => void;
 }
 
@@ -28,6 +30,8 @@ export function MapToolsPanel({
   compareResult,
   onClearSelection,
   onReferenceChange,
+  onZoomToSelection,
+  onSelectionHover,
   onRemoveSelection,
 }: Props) {
   const selectionCount = selectedUnitIds.length;
@@ -83,7 +87,12 @@ export function MapToolsPanel({
                     unitId === referenceUnitId ||
                     unitId === compareResult?.reference_unit.id;
                   return (
-                    <tr key={unitId} className={isReference ? styles.referenceRow : undefined}>
+                    <tr
+                      key={unitId}
+                      className={isReference ? styles.referenceRow : undefined}
+                      onMouseEnter={() => onSelectionHover(unitId)}
+                      onMouseLeave={() => onSelectionHover(null)}
+                    >
                       <td>
                         <div className={styles.tablePrimary}>
                           <span style={{ color: selectedUnitLabelColors[unitId] }}>
@@ -106,7 +115,18 @@ export function MapToolsPanel({
                         </button>
                         <button
                           type="button"
-                          className={styles.iconBtn}
+                          className={`${styles.iconBtn} ${styles.zoomBtn}`}
+                          onClick={() => onZoomToSelection(unitId)}
+                          aria-label={`Zoom to ${selectedUnitLabels[unitId] ?? `passage ${unitId}`}`}
+                        >
+                          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                            <circle cx="7" cy="7" r="4" />
+                            <path d="M10.5 10.5 14 14" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.iconBtn} ${styles.removeBtn}`}
                           onClick={() => onRemoveSelection(unitId)}
                           aria-label={`Remove ${selectedUnitLabels[unitId] ?? `passage ${unitId}`}`}
                         >
