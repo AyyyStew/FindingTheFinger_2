@@ -67,6 +67,22 @@ class UnitChildPreview(UnitBrief):
     child_count: int = 0
 
 
+class UnitDetail(BaseModel):
+    id: int
+    reference_label: str | None
+    ancestor_path: str | None
+    corpus_name: str
+    corpus_version_name: str | None
+    corpus_version_id: int
+    height: int | None
+    depth: int
+    taxonomy: list[TaxonomyLabel]
+    cleaned_text: str | None
+    original_text: str | None
+    unit_source: str | None
+    version_source: str | None
+
+
 # ---------------------------------------------------------------------------
 # Comparison
 # ---------------------------------------------------------------------------

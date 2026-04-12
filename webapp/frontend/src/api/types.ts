@@ -50,6 +50,22 @@ export interface UnitChildPreview extends UnitBrief {
   child_count: number
 }
 
+export interface UnitDetail {
+  id: number
+  reference_label: string | null
+  ancestor_path: string | null
+  corpus_name: string
+  corpus_version_name: string | null
+  corpus_version_id: number
+  height: number | null
+  depth: number
+  taxonomy: TaxonomyLabel[]
+  cleaned_text: string | null
+  original_text: string | null
+  unit_source: string | null
+  version_source: string | null
+}
+
 export interface SearchResult {
   id: number
   text: string | null

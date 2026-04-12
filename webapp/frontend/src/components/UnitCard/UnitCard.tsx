@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { TaxonomyLabel } from "../../api/types";
 import { getTaxonomyColor } from "../../utils/taxonomyColors";
 import { UnitChildren } from "../UnitChildren/UnitChildren";
@@ -24,6 +25,8 @@ interface Props {
   score?: number;
   /** Slot for header-row actions (e.g. clear button). Renders right of title group. */
   actions?: React.ReactNode;
+  /** Optional deep-link to full read page. */
+  readHref?: string;
   /** Renders after the text block, before UnitChildren. Use for context-specific extensions. */
   children?: React.ReactNode;
   className?: string;
@@ -41,6 +44,7 @@ export function UnitCard({
   variant = "full",
   score,
   actions,
+  readHref,
   children,
   className,
   style,
@@ -81,7 +85,19 @@ export function UnitCard({
                   {Math.round(score * 100)}%
                 </div>
               )}
+              {readHref && variant !== "micro" && (
+                <Link className={styles.readLink} to={readHref}>
+                  Read
+                </Link>
+              )}
               {actions}
+            </div>
+          )}
+          {score == null && actions == null && readHref && variant !== "micro" && (
+            <div className={styles.headerActions}>
+              <Link className={styles.readLink} to={readHref}>
+                Read
+              </Link>
             </div>
           )}
         </div>

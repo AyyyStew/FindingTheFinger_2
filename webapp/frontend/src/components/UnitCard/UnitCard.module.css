@@ -254,3 +254,20 @@
   border-radius: 50%;
   background: currentColor;
 }
+
+.readLink {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-accent-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  text-decoration: none;
+  transition: background var(--ease-fast), border-color var(--ease-fast), color var(--ease-fast);
+}
+
+.readLink:hover {
+  background: var(--color-accent-dim);
+  border-color: var(--color-accent);
+  color: var(--color-accent-hover);
+}

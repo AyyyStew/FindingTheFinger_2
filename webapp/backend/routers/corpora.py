@@ -1,10 +1,17 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from db.models import Corpus, CorpusLevel, CorpusVersion, CorpusToTaxonomy, Taxonomy, Method
+from db.models import Corpus, CorpusLevel, CorpusVersion, CorpusToTaxonomy, Taxonomy, Method, Unit
 from ..deps import get_db
-from ..schemas import CorpusInfo, CorpusLevelInfo, CorpusVersionInfo, MethodInfo, TaxonomyLabel
+from ..schemas import (
+    CorpusInfo,
+    CorpusLevelInfo,
+    CorpusVersionInfo,
+    MethodInfo,
+    TaxonomyLabel,
+    UnitBrief,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -90,4 +97,59 @@ def list_methods(db: Session = Depends(get_db)):
             vector_dim=m.vector_dim,
         )
         for m in methods
+    ]
+
+
+@router.get("/corpora/{corpus_id}/roots", response_model=list[UnitBrief])
+def corpus_roots(
+    corpus_id: int,
+    corpus_version_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    corpus = db.execute(
+        select(Corpus).where(Corpus.id == corpus_id)
+    ).scalar_one_or_none()
+    if corpus is None:
+        raise HTTPException(status_code=404, detail=f"Corpus {corpus_id} not found")
+
+    version_stmt = (
+        select(CorpusVersion)
+        .where(CorpusVersion.corpus_id == corpus_id)
+        .order_by(CorpusVersion.id)
+    )
+    versions = db.execute(version_stmt).scalars().all()
+    if not versions:
+        return []
+
+    version_id = corpus_version_id or versions[0].id
+    version_map = {v.id: v for v in versions}
+    if version_id not in version_map:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Corpus version {version_id} not found for corpus {corpus_id}",
+        )
+
+    version = version_map[version_id]
+    taxonomy = _full_taxonomy_chain(db, corpus_id)
+    roots = db.execute(
+        select(Unit)
+        .where(Unit.corpus_id == corpus_id)
+        .where(Unit.corpus_version_id == version_id)
+        .where(Unit.parent_id.is_(None))
+        .order_by(Unit.depth, Unit.id)
+    ).scalars().all()
+
+    return [
+        UnitBrief(
+            id=u.id,
+            text=u.text,
+            reference_label=u.reference_label,
+            ancestor_path=u.ancestor_path,
+            corpus_name=corpus.name,
+            corpus_version_name=version.translation_name,
+            height=u.height,
+            depth=u.depth,
+            taxonomy=taxonomy,
+        )
+        for u in roots
     ]

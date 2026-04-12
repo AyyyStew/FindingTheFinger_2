@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { searchUnits } from "../../api/client";
 import type { CorpusInfo, UnitBrief } from "../../api/types";
 import { useDebounce } from "../../hooks/useDebounce";
@@ -110,6 +111,9 @@ export function PassagePicker({
           <span className={styles.selectedPillCorpus}>
             {selected.corpus_name}
           </span>
+          <Link className={styles.selectedReadLink} to={`/read/${selected.id}`}>
+            Read
+          </Link>
           <button
             className={styles.clearBtn}
             onClick={handleClear}
@@ -124,6 +128,7 @@ export function PassagePicker({
       <UnitCard
         unit={selected}
         variant="compact"
+        readHref={`/read/${selected.id}`}
         actions={
           <button
             className={styles.clearBtn}
@@ -175,7 +180,7 @@ export function PassagePicker({
                         (t) => t.level === 0,
                       );
                       return (
-                        <button
+                        <div
                           key={unit.id}
                           role="option"
                           aria-selected={flatIdx === activeIndex}
@@ -186,12 +191,15 @@ export function PassagePicker({
                               "--tx-dim": dim,
                             } as React.CSSProperties
                           }
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            handleSelect(unit);
-                          }}
                           onMouseEnter={() => setActiveIndex(flatIdx)}
                         >
+                          <button
+                            className={styles.itemSelect}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleSelect(unit);
+                            }}
+                          >
                           <div className={styles.itemAccentBar} />
                           <div className={styles.itemInner}>
                             <div className={styles.itemHeader}>
@@ -220,7 +228,16 @@ export function PassagePicker({
                               </span>
                             )}
                           </div>
-                        </button>
+                          </button>
+                          <Link
+                            to={`/read/${unit.id}`}
+                            className={styles.readLink}
+                            onClick={() => setIsOpen(false)}
+                            onMouseDown={(e) => e.stopPropagation()}
+                          >
+                            Read
+                          </Link>
+                        </div>
                       );
                     })}
                   </div>

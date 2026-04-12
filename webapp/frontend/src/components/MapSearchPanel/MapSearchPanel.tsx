@@ -1,4 +1,5 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { fetchUnit, searchKeyword, searchPassage, searchSemantic } from '../../api/client';
 import type { CorpusInfo, SearchResult, UnitBrief } from '../../api/types';
 import {
@@ -110,6 +111,9 @@ function ResultRow({ result, showScore, rank, expanded, onToggleExpand, onHover,
           >
             ∿ Find Similar
           </button>
+          <Link className={styles.readLinkBtn} to={`/read/${result.id}`}>
+            Read
+          </Link>
         </div>
       </div>
     </div>

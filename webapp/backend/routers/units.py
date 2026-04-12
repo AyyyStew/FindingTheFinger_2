@@ -6,7 +6,15 @@ from sqlalchemy import func, or_, select
 
 from db.models import Corpus, CorpusVersion, Embedding, Method, Unit
 from ..deps import get_db
-from ..schemas import CompareItem, CompareRequest, CompareResponse, TaxonomyLabel, UnitBrief, UnitChildPreview
+from ..schemas import (
+    CompareItem,
+    CompareRequest,
+    CompareResponse,
+    TaxonomyLabel,
+    UnitBrief,
+    UnitChildPreview,
+    UnitDetail,
+)
 from ..taxonomy import build_corpus_taxonomy_map
 
 router = APIRouter(prefix="/api/units")
@@ -112,17 +120,26 @@ def search_units(
 
 
 @router.get("/{unit_id}/children", response_model=list[UnitChildPreview])
-def get_unit_children(unit_id: int, db: Session = Depends(get_db)):
+def get_unit_children(
+    unit_id: int,
+    limit: int | None = Query(None, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
     """Direct children of a unit, each with its first child and child count for preview."""
     tax_map = build_corpus_taxonomy_map(db)
 
-    child_rows = db.execute(
+    stmt = (
         select(Unit, Corpus.name, CorpusVersion.translation_name)
         .join(Corpus, Corpus.id == Unit.corpus_id)
         .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
         .where(Unit.parent_id == unit_id)
         .order_by(Unit.depth, Unit.id)
-    ).all()
+        .offset(offset)
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    child_rows = db.execute(stmt).all()
 
     if not child_rows:
         return []
@@ -169,6 +186,36 @@ def get_unit_children(unit_id: int, db: Session = Depends(get_db)):
 @router.get("/{unit_id}", response_model=UnitBrief)
 def get_unit(unit_id: int, db: Session = Depends(get_db)):
     return _fetch_unit_brief(db, unit_id)
+
+
+@router.get("/{unit_id}/detail", response_model=UnitDetail)
+def get_unit_detail(unit_id: int, db: Session = Depends(get_db)):
+    row = db.execute(
+        select(Unit, Corpus.name, CorpusVersion.translation_name, CorpusVersion.source)
+        .join(Corpus, Corpus.id == Unit.corpus_id)
+        .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
+        .where(Unit.id == unit_id)
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Unit {unit_id} not found")
+
+    unit, corpus_name, version_name, version_source = row
+    tax_map = build_corpus_taxonomy_map(db)
+    return UnitDetail(
+        id=unit.id,
+        reference_label=unit.reference_label,
+        ancestor_path=unit.ancestor_path,
+        corpus_name=corpus_name,
+        corpus_version_name=version_name,
+        corpus_version_id=unit.corpus_version_id,
+        height=unit.height,
+        depth=unit.depth,
+        taxonomy=tax_map.get(unit.corpus_id, []),
+        cleaned_text=unit.text,
+        original_text=unit.uncleaned_text,
+        unit_source=unit.source,
+        version_source=version_source,
+    )
 
 
 @router.post("/compare", response_model=CompareResponse)

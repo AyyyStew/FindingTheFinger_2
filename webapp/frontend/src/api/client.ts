@@ -7,6 +7,7 @@ import type {
   CompareResponse,
   SearchResponse,
   SemanticSearchRequest,
+  UnitDetail,
   UnitBrief,
   UnitChildPreview,
 } from './types'
@@ -41,6 +42,13 @@ export function fetchMethods(): Promise<MethodInfo[]> {
   return get('/api/methods')
 }
 
+export function fetchCorpusRoots(corpusId: number, corpusVersionId?: number): Promise<UnitBrief[]> {
+  const params = new URLSearchParams()
+  if (corpusVersionId != null) params.set('corpus_version_id', String(corpusVersionId))
+  const qs = params.toString()
+  return get(`/api/corpora/${corpusId}/roots${qs ? `?${qs}` : ''}`)
+}
+
 /** height omitted = search all heights */
 export function searchUnits(q: string, height?: number, corpusIds?: number[]): Promise<UnitBrief[]> {
   const params = new URLSearchParams({ q })
@@ -55,8 +63,16 @@ export function fetchUnit(unitId: number): Promise<UnitBrief> {
   return get(`/api/units/${unitId}`)
 }
 
-export function getUnitChildren(unitId: number): Promise<UnitChildPreview[]> {
-  return get(`/api/units/${unitId}/children`)
+export function getUnitChildren(unitId: number, limit?: number, offset?: number): Promise<UnitChildPreview[]> {
+  const params = new URLSearchParams()
+  if (limit != null) params.set('limit', String(limit))
+  if (offset != null) params.set('offset', String(offset))
+  const qs = params.toString()
+  return get(`/api/units/${unitId}/children${qs ? `?${qs}` : ''}`)
+}
+
+export function fetchUnitDetail(unitId: number): Promise<UnitDetail> {
+  return get(`/api/units/${unitId}/detail`)
 }
 
 export function searchSemantic(req: SemanticSearchRequest): Promise<SearchResponse> {

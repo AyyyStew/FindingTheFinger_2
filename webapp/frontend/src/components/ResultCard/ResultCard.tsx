@@ -12,6 +12,7 @@ export function ResultCard({ result, showScore }: Props) {
       unit={result}
       variant="full"
       score={showScore ? result.score : undefined}
+      readHref={`/read/${result.id}`}
     />
   )
 }
