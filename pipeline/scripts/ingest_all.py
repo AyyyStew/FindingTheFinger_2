@@ -50,6 +50,16 @@ from pipeline.parsers.chuang_tzu import parse_chuang_tzu
 from pipeline.parsers.analects import parse_analects
 from pipeline.parsers.kojiki import parse_kojiki
 from pipeline.parsers.poetic_edda import parse_poetic_edda
+from pipeline.parsers.prose_edda import parse_prose_edda
+from pipeline.parsers.enuma_elish import parse_enuma_elish
+from pipeline.parsers.gilgamesh import parse_gilgamesh
+from pipeline.parsers.mahabharata import parse_mahabharata
+from pipeline.parsers.ramayana import parse_ramayana
+from pipeline.parsers.digha_nikaya import parse_digha_nikaya
+from pipeline.parsers.majjhima_nikaya import parse_majjhima_nikaya
+from pipeline.parsers.samyutta_nikaya import parse_samyutta_nikaya
+from pipeline.parsers.anguttara_nikaya import parse_anguttara_nikaya
+from pipeline.parsers.khuddaka_nikaya import parse_khuddaka_nikaya
 from pipeline.parsers.yasna import parse_yasna
 from pipeline.parsers.vendidad import parse_vendidad
 
@@ -71,7 +81,14 @@ CORPORA = [
     partial(parse_dhammapada,    str(RAW / "Indic_Dharmic/Buddhist/dhammapada.txt")),
     partial(parse_diamond_sutra, str(RAW / "Indic_Dharmic/Buddhist/diamond_sutra.txt")),
     partial(parse_jataka,        str(RAW / "Indic_Dharmic/Buddhist/jataka_tales.txt")),
+    partial(parse_digha_nikaya,     str(RAW / "Indic_Dharmic/Buddhist/SuttaPitaka.epub")),
+    partial(parse_majjhima_nikaya,  str(RAW / "Indic_Dharmic/Buddhist/SuttaPitaka.epub")),
+    partial(parse_samyutta_nikaya,  str(RAW / "Indic_Dharmic/Buddhist/SuttaPitaka.epub")),
+    partial(parse_anguttara_nikaya, str(RAW / "Indic_Dharmic/Buddhist/SuttaPitaka.epub")),
+    partial(parse_khuddaka_nikaya,  str(RAW / "Indic_Dharmic/Buddhist/SuttaPitaka.epub")),
     partial(parse_sggs,          str(RAW / "Indic_Dharmic/Sikhism/sggs/gurbanidb.sqlite")),
+    partial(parse_mahabharata,   str(RAW / "Indic_Dharmic/Hindu/Mahabharata.txt")),
+    partial(parse_ramayana,      str(RAW / "Indic_Dharmic/Hindu/Ramayana")),
 
     # ── East Asian ─────────────────────────────────────────────────────────
     partial(parse_dao_de_jing, str(RAW / "East Asian/Taoism/dao_de_ching.html")),
@@ -81,6 +98,9 @@ CORPORA = [
 
     # ── Ancient / Historical ───────────────────────────────────────────────
     partial(parse_poetic_edda, str(RAW / "Historical_Ancient/Germanic/poetic_eda.txt")),
+    partial(parse_prose_edda,  str(RAW / "Historical_Ancient/Germanic/prose_eda.txt")),
+    partial(parse_gilgamesh,   str(RAW / "Historical_Ancient/Mesopotamian/The Epic of Gilgamesh.pdf")),
+    partial(parse_enuma_elish, str(RAW / "Historical_Ancient/Mesopotamian/Enuma Elish - The Babylonian Epic of Creation - Full Text - World History Encyclopedia.html")),
 
     # ── Persian ────────────────────────────────────────────────────────────
     partial(parse_yasna,    str(RAW / "Iranian_Persian/Zoroastrianism/AVESTA_ YASNA_ (English).html")),

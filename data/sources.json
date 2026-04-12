@@ -128,6 +128,86 @@
     "label": "The Poetic Edda"
   },
   {
+    "corpus": "Prose Edda",
+    "translation": "Rasmus B. Anderson Translation",
+    "source_key": "gutenberg_18947_prose_edda",
+    "url": "https://www.gutenberg.org/ebooks/18947",
+    "provider": "Project Gutenberg",
+    "label": "The Younger Edda"
+  },
+  {
+    "corpus": "Enuma Elish",
+    "translation": "W.G. Lambert Translation",
+    "source_key": "worldhistory_enuma_elish",
+    "url": "https://www.worldhistory.org/article/225/enuma-elish---the-babylonian-epic-of-creation---fu/",
+    "provider": "World History Encyclopedia",
+    "label": "Enuma Elish - Full Text"
+  },
+  {
+    "corpus": "Epic of Gilgamesh",
+    "translation": "Maureen Gallery Kovacs Translation",
+    "source_key": "uruk_warka_gilgamesh",
+    "url": "https://uruk-warka.dk/Gilgamish/The%20Epic%20of%20Gilgamesh.pdf",
+    "provider": "Uruk-Warka.dk",
+    "label": "The Epic of Gilgamesh PDF"
+  },
+  {
+    "corpus": "Mahabharata",
+    "translation": "Kisari Mohan Ganguli Translation",
+    "source_key": "huggingface_mahabharath",
+    "url": "https://huggingface.co/datasets/aaru2330/Mahabharath",
+    "provider": "Hugging Face",
+    "label": "Mahabharath dataset"
+  },
+  {
+    "corpus": "Ramayana",
+    "translation": "Valmiki Ramayana Project Translation",
+    "source_key": "kaggle_valmiki_ramayana_dataset",
+    "url": "https://www.kaggle.com/datasets/niharsingla004/valmiki-ramayana-dataset",
+    "provider": "Kaggle",
+    "label": "Valmiki Ramayana Dataset"
+  },
+  {
+    "corpus": "Digha Nikaya",
+    "translation": "Thanissaro Bhikkhu Translation (Handful of Leaves)",
+    "source_key": "dhammatalks_handful_of_leaves",
+    "url": "https://www.dhammatalks.org/books/HandfulOfLeaves/",
+    "provider": "dhammatalks.org",
+    "label": "Handful of Leaves"
+  },
+  {
+    "corpus": "Majjhima Nikaya",
+    "translation": "Thanissaro Bhikkhu Translation (Handful of Leaves)",
+    "source_key": "dhammatalks_handful_of_leaves",
+    "url": "https://www.dhammatalks.org/books/HandfulOfLeaves/",
+    "provider": "dhammatalks.org",
+    "label": "Handful of Leaves"
+  },
+  {
+    "corpus": "Samyutta Nikaya",
+    "translation": "Thanissaro Bhikkhu Translation (Handful of Leaves)",
+    "source_key": "dhammatalks_handful_of_leaves",
+    "url": "https://www.dhammatalks.org/books/HandfulOfLeaves/",
+    "provider": "dhammatalks.org",
+    "label": "Handful of Leaves"
+  },
+  {
+    "corpus": "Anguttara Nikaya",
+    "translation": "Thanissaro Bhikkhu Translation (Handful of Leaves)",
+    "source_key": "dhammatalks_handful_of_leaves",
+    "url": "https://www.dhammatalks.org/books/HandfulOfLeaves/",
+    "provider": "dhammatalks.org",
+    "label": "Handful of Leaves"
+  },
+  {
+    "corpus": "Khuddaka Nikaya",
+    "translation": "Thanissaro Bhikkhu Translation (Handful of Leaves)",
+    "source_key": "dhammatalks_handful_of_leaves",
+    "url": "https://www.dhammatalks.org/books/HandfulOfLeaves/",
+    "provider": "dhammatalks.org",
+    "label": "Handful of Leaves"
+  },
+  {
     "corpus": "Yasna",
     "translation": "Lawrence Mills Translation",
     "source_key": "avesta_yasna",

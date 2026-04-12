@@ -24,11 +24,8 @@ webapp/frontend/dist/
 webapp/frontend/.vite/
 
 # ===== Data =====
-data/*
-!data/sources.json
+data/Indic_Dharmic/Sikhism
 *.pkl
-*.sqlite
-*.db
 *.sqldata
 *.sql.zip
 
