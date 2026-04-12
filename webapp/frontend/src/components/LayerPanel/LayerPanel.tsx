@@ -329,9 +329,7 @@ export function LayerPanel({
 
           <div className={styles.traditionList}>
             {traditionGroups.map((tg) => {
-              const { solid } = getTaxonomyColor(
-                tg.subGroups[0]?.corpora[0]?.taxonomy ?? [],
-              );
+              const { solid: traditionSolid } = getTaxonomyColor([tg.root]);
               const tgCorpora = tg.subGroups.flatMap((sg) => sg.corpora);
               const tAllVis = tgCorpora.every((c) => isCorpusVisible(c.id));
               const tNoneVis = tgCorpora.every((c) => !isCorpusVisible(c.id));
@@ -350,7 +348,7 @@ export function LayerPanel({
                   <div className={styles.traditionRow}>
                     <span
                       className={styles.traditionDot}
-                      style={{ background: solid }}
+                      style={{ background: traditionSolid }}
                     />
                     <label className={styles.groupLabel}>
                       <input
@@ -362,7 +360,11 @@ export function LayerPanel({
                         }}
                         onChange={() => toggleGroup(tgCorpora)}
                       />
-                      <span className={styles.groupName} title={tg.root.name}>
+                      <span
+                        className={styles.groupName}
+                        title={tg.root.name}
+                        style={{ color: traditionSolid }}
+                      >
                         {tg.root.name}
                       </span>
                     </label>
@@ -389,6 +391,9 @@ export function LayerPanel({
                   {/* Level-1 sub-groups */}
                   {tExpanded &&
                     tg.subGroups.map((sg) => {
+                      const { solid: subGroupSolid } = getTaxonomyColor(
+                        sg.corpora[0]?.taxonomy ?? [],
+                      );
                       const sgAllVis = sg.corpora.every((c) =>
                         isCorpusVisible(c.id),
                       );
@@ -407,7 +412,14 @@ export function LayerPanel({
                       return (
                         <div key={sg.node.id} className={styles.subGroupBlock}>
                           {/* Level-1 row */}
-                          <div className={styles.subGroupRow}>
+                          <div
+                            className={styles.subGroupRow}
+                            style={
+                              {
+                                "--tradition-color": subGroupSolid,
+                              } as React.CSSProperties
+                            }
+                          >
                             <label className={styles.groupLabel}>
                               <input
                                 type="checkbox"
@@ -422,6 +434,7 @@ export function LayerPanel({
                               <span
                                 className={styles.groupName}
                                 title={sg.node.name}
+                                style={{ color: subGroupSolid }}
                               >
                                 {sg.node.name}
                               </span>
@@ -450,6 +463,9 @@ export function LayerPanel({
                           {sgExpanded && (
                             <ul className={styles.corpusList}>
                               {sg.corpora.map((corpus) => {
+                                const { solid: corpusSolid } = getTaxonomyColor(
+                                  corpus.taxonomy,
+                                );
                                 const visible = isCorpusVisible(corpus.id);
                                 const cSoloed =
                                   visible &&
@@ -460,6 +476,11 @@ export function LayerPanel({
                                   <li
                                     key={corpus.id}
                                     className={styles.corpusItem}
+                                    style={
+                                      {
+                                        "--tradition-color": corpusSolid,
+                                      } as React.CSSProperties
+                                    }
                                   >
                                     <label className={styles.corpusRow}>
                                       <input
@@ -471,6 +492,7 @@ export function LayerPanel({
                                       <span
                                         className={styles.corpusName}
                                         title={corpus.name}
+                                        style={{ color: corpusSolid }}
                                       >
                                         {corpus.name}
                                       </span>

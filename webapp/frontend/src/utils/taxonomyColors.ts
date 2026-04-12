@@ -22,7 +22,7 @@ const ROOT_COLORS: Array<{ keywords: string[]; hsl: HSL }> = [
   },
   {
     keywords: ["ancient", "historic", "egypt", "greek", "roman", "sumer"],
-    hsl: { h: 0, s: 0, l: 43 },
+    hsl: { h: 0, s: 0, l: 60 },
   },
   {
     keywords: ["new religious", "latter", "bahai"],
@@ -38,10 +38,17 @@ const ROOT_COLORS: Array<{ keywords: string[]; hsl: HSL }> = [
 const FALLBACK: HSL = { h: 0, s: 0, l: 43 };
 
 // ── Tuning knobs ─────────────────────────────────────────────────────────────
-const L1_HUE_RANGE = 45; // modulo divisor → max raw shift before centering
-const L1_HUE_CENTER = 30; // subtract to center: range becomes -(CENTER)..(RANGE-1-CENTER)
-const L2_LIGHT_RANGE = 4; // modulo divisor → max raw lightness shift
-const L2_LIGHT_CENTER = 25; // subtract to center
+//
+// Switch to "static" if you want only root-level taxonomy colors and no
+// per-subtradition hue/lightness shifts.
+const TAXONOMY_COLOR_MODE: "shifted" | "static" = "shifted";
+
+// Level 1: hue shift approximately ±25°
+const L1_HUE_RANGE = 51;
+const L1_HUE_CENTER = 25;
+// Level 2: lightness shift approximately ±12%
+const L2_LIGHT_RANGE = 25;
+const L2_LIGHT_CENTER = 12;
 
 // Simple deterministic hash of a string → 0..65535
 function nameHash(name: string): number {
@@ -85,20 +92,22 @@ export function getTaxonomyColor(
   );
   let hsl: HSL = base ? { ...base.hsl } : { ...FALLBACK };
 
-  // Level 1 → hue shift ±25°
-  const l1 = sorted.find((t) => t.level === 1);
-  if (l1) {
-    const h1 = nameHash(l1.name);
-    const shift = (h1 % L1_HUE_RANGE) - L1_HUE_CENTER;
-    hsl = { ...hsl, h: (hsl.h + shift + 360) % 360 };
-  }
+  if (TAXONOMY_COLOR_MODE === "shifted") {
+    // Level 1 → hue shift ±25°
+    const l1 = sorted.find((t) => t.level === 1);
+    if (l1) {
+      const h1 = nameHash(l1.name);
+      const shift = (h1 % L1_HUE_RANGE) - L1_HUE_CENTER;
+      hsl = { ...hsl, h: (hsl.h + shift + 360) % 360 };
+    }
 
-  // Level 2 → lightness shift ±12%
-  const l2 = sorted.find((t) => t.level === 2);
-  if (l2) {
-    const h2 = nameHash(l2.name);
-    const shift = (h2 % L2_LIGHT_RANGE) - L2_LIGHT_CENTER;
-    hsl = { ...hsl, l: Math.max(22, Math.min(72, hsl.l + shift)) };
+    // Level 2 → lightness shift ±12%
+    const l2 = sorted.find((t) => t.level === 2);
+    if (l2) {
+      const h2 = nameHash(l2.name);
+      const shift = (h2 % L2_LIGHT_RANGE) - L2_LIGHT_CENTER;
+      hsl = { ...hsl, l: Math.max(22, Math.min(72, hsl.l + shift)) };
+    }
   }
 
   return { solid: hslStr(hsl), dim: hslDimStr(hsl) };
