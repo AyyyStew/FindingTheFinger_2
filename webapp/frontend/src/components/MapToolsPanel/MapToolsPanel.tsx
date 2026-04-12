@@ -4,6 +4,7 @@ import styles from './MapToolsPanel.module.css';
 interface Props {
   selectedUnitIds: number[];
   selectedUnitLabels: Record<number, string | null | undefined>;
+  selectedUnitLabelColors: Record<number, string | undefined>;
   referenceUnitId: number | null;
   isComparing: boolean;
   compareError: string | null;
@@ -20,6 +21,7 @@ function formatSimilarity(value: number) {
 export function MapToolsPanel({
   selectedUnitIds,
   selectedUnitLabels,
+  selectedUnitLabelColors,
   referenceUnitId,
   isComparing,
   compareError,
@@ -84,7 +86,9 @@ export function MapToolsPanel({
                     <tr key={unitId} className={isReference ? styles.referenceRow : undefined}>
                       <td>
                         <div className={styles.tablePrimary}>
-                          {item?.unit.reference_label ?? selectedUnitLabels[unitId] ?? `Passage #${unitId}`}
+                          <span style={{ color: selectedUnitLabelColors[unitId] }}>
+                            {item?.unit.reference_label ?? selectedUnitLabels[unitId] ?? `Passage #${unitId}`}
+                          </span>
                         </div>
                         <div className={styles.tableSecondary}>
                           {item?.unit.corpus_name ? `${item.unit.corpus_name} - #${unitId}` : `#${unitId}`}

@@ -52,6 +52,27 @@ function buildUnitPositionMap(data: StandardRunData): globalThis.Map<number, [nu
   return map;
 }
 
+function buildUnitCorpusMap(data: StandardRunData): globalThis.Map<number, number> {
+  const map = new globalThis.Map<number, number>();
+  for (const [, layer] of data.layers) {
+    for (let i = 0; i < layer.count; i++) {
+      map.set(layer.unitIds[i], layer.corpusIds[i]);
+    }
+  }
+  for (const [, layer] of data.depthLayers) {
+    for (let i = 0; i < layer.count; i++) {
+      if (!map.has(layer.unitIds[i])) {
+        map.set(layer.unitIds[i], layer.corpusIds[i]);
+      }
+    }
+  }
+  return map;
+}
+
+function rgbTupleToCss([r, g, b]: [number, number, number]): string {
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 /** Pan to a point, preserving the current zoom level. */
 function flyToPoint(x: number, y: number): FlyToTarget {
   return { target: [x, y, 0] };
@@ -144,6 +165,11 @@ export function Map() {
   /** Map from unitId → [x, y] built once from all height+depth layers. */
   const unitPositionMap = useMemo(
     () => resolvedData ? buildUnitPositionMap(resolvedData) : new globalThis.Map<number, [number, number]>(),
+    [resolvedData],
+  );
+
+  const unitCorpusMap = useMemo(
+    () => resolvedData ? buildUnitCorpusMap(resolvedData) : new globalThis.Map<number, number>(),
     [resolvedData],
   );
 
@@ -385,6 +411,16 @@ export function Map() {
     return labels;
   }, [compareSelectionIds, compareResult, resolvedData, selectedUnitQueries]);
 
+  const selectedUnitLabelColors = useMemo(() => {
+    const colors: Record<number, string> = {};
+    for (const unitId of compareSelectionIds) {
+      const corpusId = unitCorpusMap.get(unitId);
+      const color = corpusId == null ? null : colorMap.get(corpusId);
+      if (color) colors[unitId] = rgbTupleToCss(color);
+    }
+    return colors;
+  }, [colorMap, compareSelectionIds, unitCorpusMap]);
+
   if (error) {
     return (
       <div className={styles.centred}>
@@ -565,6 +601,7 @@ export function Map() {
             <MapToolsPanel
               selectedUnitIds={compareSelectionIds}
               selectedUnitLabels={selectedUnitLabels}
+              selectedUnitLabelColors={selectedUnitLabelColors}
               referenceUnitId={compareReferenceId}
               isComparing={isComparing}
               compareError={compareError}
