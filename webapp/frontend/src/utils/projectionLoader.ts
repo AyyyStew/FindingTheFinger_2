@@ -203,8 +203,10 @@ export function isPcaRunData(d: ProjectionRunData): d is PcaRunData {
  * Build an interleaved positions Float32Array from two PC indices (0-indexed).
  * Used by Map.tsx when the user changes the X/Y PC axis selectors.
  */
+type PcaProjectionLayerData = PcaHeightLayerData | PcaDepthLayerData;
+
 export function buildPcaPositions(
-  layer: PcaHeightLayerData,
+  layer: PcaProjectionLayerData,
   xPc: number,
   yPc: number,
 ): Float32Array {
