@@ -364,7 +364,7 @@ interface KdeSegmentDatum {
 }
 
 interface LabelDatum {
-  position: [number, number];
+  position: [number, number, number];
   text: string;
   color: [number, number, number, number];
 }
@@ -828,13 +828,14 @@ export function buildLabelLayers(
     if (includeCorpusLabels) {
       const corpusLayer = data.depthLayers.get(0);
       if (corpusLayer) {
-        const corpusCentroids = new Map<number, { x: number; y: number; count: number }>();
+        const corpusCentroids = new Map<number, { x: number; y: number; z: number; count: number }>();
         for (let i = 0; i < corpusLayer.count; i++) {
           const corpusId = corpusLayer.corpusIds[i];
           if (hiddenCorpora.has(corpusId)) continue;
-          const current = corpusCentroids.get(corpusId) ?? { x: 0, y: 0, count: 0 };
+          const current = corpusCentroids.get(corpusId) ?? { x: 0, y: 0, z: 0, count: 0 };
           current.x += corpusLayer.positions[i * 3];
           current.y += corpusLayer.positions[i * 3 + 1];
+          current.z += corpusLayer.positions[i * 3 + 2];
           current.count += 1;
           corpusCentroids.set(corpusId, current);
         }
@@ -844,7 +845,7 @@ export function buildLabelLayers(
           if (!text) continue;
           const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
           nextLabels.push({
-            position: [centroid.x / centroid.count, centroid.y / centroid.count],
+            position: [centroid.x / centroid.count, centroid.y / centroid.count, centroid.z / centroid.count],
             text,
             color: [r, g, b, 245],
           });
@@ -862,7 +863,7 @@ export function buildLabelLayers(
         if (!text) continue;
         const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
         nextLabels.push({
-          position: [layer.positions[i * 3], layer.positions[i * 3 + 1]],
+          position: [layer.positions[i * 3], layer.positions[i * 3 + 1], layer.positions[i * 3 + 2]],
           text,
           color: [r, g, b, depth === 0 ? 245 : depth === 1 ? 225 : 195],
         });
@@ -902,20 +903,20 @@ export function buildAllLayers(
   corpusLabelMap: CorpusLabelMap,
   selectedUnitIds: Set<number> | null = null,
   overlays: MapOverlayOptions = DEFAULT_OVERLAY_OPTIONS,
-  enableDerivedOverlays = true,
+  enablePlanarDerivedOverlays = true,
 ): Layer[] {
   const scatterLayers = visibility.scatterMode === 'depth'
     ? buildDepthScatterLayers(data, visibility, colorMap, selectedUnitIds)
     : buildScatterLayers(data, visibility, colorMap, selectedUnitIds);
   return [
-    ...(enableDerivedOverlays && overlays.kde
+    ...(enablePlanarDerivedOverlays && overlays.kde
       ? buildKdeCloudLayers(data, visibility, colorMap, overlays.kdeBreakdown)
       : []),
-    ...(enableDerivedOverlays && overlays.voronoi
+    ...(enablePlanarDerivedOverlays && overlays.voronoi
       ? buildVoronoiLayers(data, visibility, colorMap)
       : []),
     ...(overlays.hidePoints ? [] : scatterLayers),
-    ...(enableDerivedOverlays && overlays.labels
+    ...(overlays.labels
       ? buildLabelLayers(
           data,
           visibility,

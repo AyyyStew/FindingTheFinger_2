@@ -67,8 +67,18 @@ interface MapCanvasProps {
   viewMode?: MapViewMode;
   /** Increment to trigger a zoom-to-fit reset. */
   fitToBoundsToken?: number;
-  /** Whether Voronoi/KDE/labels derived overlays are enabled for this view mode. */
-  enableDerivedOverlays?: boolean;
+  /** Whether planar-only overlays (Voronoi/KDE) are enabled for this view mode. */
+  enablePlanarDerivedOverlays?: boolean;
+}
+
+function flattenPositionsTo2D(positions: Float32Array): Float32Array {
+  const flat = new Float32Array(positions.length);
+  for (let i = 0; i < positions.length; i += 3) {
+    flat[i] = positions[i];
+    flat[i + 1] = positions[i + 1];
+    flat[i + 2] = 0;
+  }
+  return flat;
 }
 
 function computeInitialViewState(bounds: StandardRunData['bounds'], viewMode: MapViewMode): DeckViewState {
@@ -109,7 +119,7 @@ export function MapCanvas({
   overlays = DEFAULT_OVERLAY_OPTIONS,
   viewMode = '2d',
   fitToBoundsToken = 0,
-  enableDerivedOverlays = true,
+  enablePlanarDerivedOverlays = true,
 }: MapCanvasProps) {
   const [viewState, setViewState] = useState<DeckViewState>(
     () => computeInitialViewState(data.bounds, viewMode),
@@ -117,15 +127,46 @@ export function MapCanvas({
 
   const [selectedHoverFillAlpha, setSelectedHoverFillAlpha] = useState(0);
 
+  const renderData = useMemo<StandardRunData>(() => {
+    if (viewMode === '3d') return data;
+
+    const layers = new Map<number, typeof data.layers extends Map<number, infer T> ? T : never>();
+    for (const [height, layer] of data.layers) {
+      layers.set(height, {
+        ...layer,
+        positions: flattenPositionsTo2D(layer.positions),
+      } as typeof layer);
+    }
+
+    const depthLayers = new Map<number, typeof data.depthLayers extends Map<number, infer T> ? T : never>();
+    for (const [depth, layer] of data.depthLayers) {
+      depthLayers.set(depth, {
+        ...layer,
+        positions: flattenPositionsTo2D(layer.positions),
+      } as typeof layer);
+    }
+
+    return {
+      ...data,
+      layers,
+      depthLayers,
+      bounds: {
+        ...data.bounds,
+        minZ: 0,
+        maxZ: 0,
+      },
+    };
+  }, [data, viewMode]);
+
   // Refit when the dataset (projection) changes.
   useEffect(() => {
-    setViewState(computeInitialViewState(data.bounds, viewMode));
-  }, [data, viewMode]);
+    setViewState(computeInitialViewState(renderData.bounds, viewMode));
+  }, [renderData, viewMode]);
 
   // Explicit zoom-to-fit trigger from parent controls.
   useEffect(() => {
-    setViewState(computeInitialViewState(data.bounds, viewMode));
-  }, [fitToBoundsToken, data.bounds, viewMode]);
+    setViewState(computeInitialViewState(renderData.bounds, viewMode));
+  }, [fitToBoundsToken, renderData.bounds, viewMode]);
 
   // Pan (and optionally zoom) when flyTo changes.
   useEffect(() => {
@@ -181,37 +222,39 @@ export function MapCanvas({
 
   const baseLayers = useMemo(() => {
     return buildAllLayers(
-      data,
+      renderData,
       visibility,
       colorMap,
       corpusLabelMap,
       selectedUnitIds,
       overlays,
-      enableDerivedOverlays,
+      enablePlanarDerivedOverlays,
     );
   }, [
-    data,
+    renderData,
     visibility,
     colorMap,
     corpusLabelMap,
     selectedUnitIds,
     overlays,
-    enableDerivedOverlays,
+    enablePlanarDerivedOverlays,
   ]);
 
   const layers = useMemo(() => {
+    const normalizePos = (p: [number, number, number]): [number, number, number] =>
+      viewMode === '2d' ? [p[0], p[1], 0] : p;
     const extras: Layer[] = [];
     if (resultPositions && resultPositions.length > 0) {
-      const cl = buildConstellationLayer(resultPositions);
+      const cl = buildConstellationLayer(resultPositions.map(normalizePos));
       if (cl) extras.push(cl);
     }
     if (selectedPositions && selectedPositions.length > 0) {
-      const sl = buildHighlightLayer(selectedPositions, 'selected-comparison-highlight', 9);
+      const sl = buildHighlightLayer(selectedPositions.map(normalizePos), 'selected-comparison-highlight', 9);
       if (sl) extras.push(sl);
     }
     if (selectedHoverPosition) {
       const shl = buildHighlightLayer(
-        [selectedHoverPosition],
+        [normalizePos(selectedHoverPosition)],
         'selected-comparison-hover-highlight',
         9,
         selectedHoverFillAlpha,
@@ -219,7 +262,7 @@ export function MapCanvas({
       if (shl) extras.push(shl);
     }
     if (highlightPos) {
-      const hl = buildHighlightLayer([highlightPos]);
+      const hl = buildHighlightLayer([normalizePos(highlightPos)]);
       if (hl) extras.push(hl);
     }
     return [...baseLayers, ...extras];
@@ -230,6 +273,7 @@ export function MapCanvas({
     selectedHoverFillAlpha,
     resultPositions,
     highlightPos,
+    viewMode,
   ]);
 
   // ── Pick handler ───────────────────────────────────────────────────────────

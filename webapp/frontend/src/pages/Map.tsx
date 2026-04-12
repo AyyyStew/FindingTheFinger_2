@@ -3,6 +3,7 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { compareUnits, fetchCorpora, fetchUnit } from '../api/client';
 import type { CompareResponse, SearchResult } from '../api/types';
 import { MapCanvas, type HoverInfo, type FlyToTarget, type MapViewMode } from '../components/MapCanvas/MapCanvas';
+import { MapViewModeToggle } from '../components/MapViewModeToggle/MapViewModeToggle';
 import { LayerPanel } from '../components/LayerPanel/LayerPanel';
 import { MapSearchPanel, type MapSearchPanelHandle } from '../components/MapSearchPanel/MapSearchPanel';
 import { MapToolsPanel } from '../components/MapToolsPanel/MapToolsPanel';
@@ -65,6 +66,7 @@ export function Map() {
   const [rightPanelTab, setRightPanelTab] = useState<'search' | 'tools'>('search');
   const [overlays, setOverlays] = useState<MapOverlayOptions>(DEFAULT_OVERLAY_OPTIONS);
   const [fitToBoundsToken, setFitToBoundsToken] = useState(0);
+  const [flyTo, setFlyTo] = useState<FlyToTarget | null>(null);
 
   // PCA axis selection (0-indexed component indices)
   const [xPc, setXPc] = useState(0);
@@ -118,6 +120,8 @@ export function Map() {
     setXPc(0);
     setYPc(1);
     setZPc(2);
+    setFitToBoundsToken(t => t + 1);
+    setFlyTo(null);
     setHighlightPos(null);
     setSearchResults(null);
     setAnchorUnitId(null);
@@ -264,8 +268,6 @@ export function Map() {
       staleTime: Infinity,
     })),
   });
-
-  const [flyTo, setFlyTo] = useState<FlyToTarget | null>(null);
 
   const handleSearchResults = useCallback((results: SearchResult[], _mode: SearchMode, _label: string, anchor?: number) => {
     setSearchResults(results.length > 0 ? results : null);
@@ -426,8 +428,6 @@ export function Map() {
     ? projData.manifest as PcaManifest
     : null;
 
-  const derivedOverlaysAvailable = viewMode === '2d';
-
   useEffect(() => {
     if (!pcaManifest) return;
     const maxIndex = Math.max(0, pcaManifest.n_components - 1);
@@ -544,62 +544,45 @@ export function Map() {
             </div>
           ) : (
             <>
+              <MapViewModeToggle
+                viewMode={viewMode}
+                onChange={setViewMode}
+                onZoomToFit={() => setFitToBoundsToken(t => t + 1)}
+              />
               <div className={styles.overlayToolbar} aria-label="Map view overlays">
-                <div className={styles.viewModeGroup} aria-label="Map dimension mode">
-                  <button
-                    type="button"
-                    className={`${styles.overlayBtn} ${viewMode === '2d' ? styles.overlayBtnActive : ''}`}
-                    onClick={() => setViewMode('2d')}
-                  >
-                    2D
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.overlayBtn} ${viewMode === '3d' ? styles.overlayBtnActive : ''}`}
-                    onClick={() => setViewMode('3d')}
-                  >
-                    3D
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className={styles.overlayBtn}
-                  onClick={() => setFitToBoundsToken(t => t + 1)}
-                >
-                  Zoom to fit
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.overlayBtn} ${overlays.voronoi ? styles.overlayBtnActive : ''}`}
-                  onClick={() => toggleOverlay('voronoi')}
-                  disabled={!derivedOverlaysAvailable}
-                >
-                  Voronoi
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.overlayBtn} ${overlays.kde ? styles.overlayBtnActive : ''}`}
-                  onClick={() => toggleOverlay('kde')}
-                  disabled={!derivedOverlaysAvailable}
-                >
-                  KDE
-                </button>
-                <select
-                  className={styles.overlaySelect}
-                  value={overlays.kdeBreakdown}
-                  onChange={e => setKdeBreakdown(e.target.value as KdeBreakdown)}
-                  disabled={!derivedOverlaysAvailable || !overlays.kde}
-                  aria-label="KDE breakdown"
-                >
-                  {Object.entries(KDE_BREAKDOWN_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+                {viewMode === '2d' && (
+                  <>
+                    <button
+                      type="button"
+                      className={`${styles.overlayBtn} ${overlays.voronoi ? styles.overlayBtnActive : ''}`}
+                      onClick={() => toggleOverlay('voronoi')}
+                    >
+                      Voronoi
+                    </button>
+                    <button
+                      type="button"
+                      className={`${styles.overlayBtn} ${overlays.kde ? styles.overlayBtnActive : ''}`}
+                      onClick={() => toggleOverlay('kde')}
+                    >
+                      KDE
+                    </button>
+                    <select
+                      className={styles.overlaySelect}
+                      value={overlays.kdeBreakdown}
+                      onChange={e => setKdeBreakdown(e.target.value as KdeBreakdown)}
+                      disabled={!overlays.kde}
+                      aria-label="KDE breakdown"
+                    >
+                      {Object.entries(KDE_BREAKDOWN_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </>
+                )}
                 <button
                   type="button"
                   className={`${styles.overlayBtn} ${overlays.labels ? styles.overlayBtnActive : ''}`}
                   onClick={() => toggleOverlay('labels')}
-                  disabled={!derivedOverlaysAvailable}
                 >
                   Labels
                 </button>
@@ -608,7 +591,7 @@ export function Map() {
                     type="button"
                     className={`${styles.overlayBtn} ${overlays.labelCorpus ? styles.overlayBtnActive : ''}`}
                     onClick={toggleCorpusLabels}
-                    disabled={!derivedOverlaysAvailable || !overlays.labels}
+                    disabled={!overlays.labels}
                   >
                     corpus
                   </button>
@@ -618,7 +601,7 @@ export function Map() {
                         type="button"
                         className={`${styles.overlayBtn} ${overlays.labelDepths.includes(depth) ? styles.overlayBtnActive : ''}`}
                         onClick={() => toggleLabelDepth(depth)}
-                        disabled={!derivedOverlaysAvailable || !overlays.labels}
+                        disabled={!overlays.labels}
                       >
                         d{depth}
                       </button>
@@ -641,7 +624,7 @@ export function Map() {
                 overlays={overlays}
                 viewMode={viewMode}
                 fitToBoundsToken={fitToBoundsToken}
-                enableDerivedOverlays={derivedOverlaysAvailable}
+                enablePlanarDerivedOverlays={viewMode === '2d'}
                 onHover={setHover}
                 onClick={handleMapClick}
                 resultPositions={visibleResultPositions}

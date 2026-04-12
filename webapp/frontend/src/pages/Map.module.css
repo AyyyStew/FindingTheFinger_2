@@ -152,7 +152,7 @@
 
 .overlayToolbar {
   position: absolute;
-  top: var(--space-3);
+  top: calc(var(--space-3) + 42px);
   left: var(--space-3);
   z-index: 20;
   display: flex;
@@ -164,15 +164,6 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-surface) 92%, transparent);
   box-shadow: var(--shadow-sm);
-}
-
-.viewModeGroup {
-  display: flex;
-  align-items: center;
-  gap: var(--space-0-5);
-  padding-right: var(--space-1);
-  margin-right: var(--space-1);
-  border-right: 1px solid var(--color-border-subtle);
 }
 
 .overlayBtn {
