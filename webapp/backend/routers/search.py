@@ -30,14 +30,19 @@ def _vector_search(
     db: Session,
     query_vec: list[float],
     method_id: int,
-    height_min: int,
-    height_max: int,
+    height_min: int | None,
+    height_max: int | None,
+    depth_min: int | None,
+    depth_max: int | None,
     corpus_ids: list[int] | None,
     limit: int,
     tax_map: dict[int, list[TaxonomyLabel]],
     exclude_unit_id: int | None = None,
     offset: int = 0,
 ) -> list[SearchResult]:
+    if corpus_ids is not None and len(corpus_ids) == 0:
+        return []
+
     stmt = (
         select(
             Unit,
@@ -49,8 +54,11 @@ def _vector_search(
         .join(Corpus, Corpus.id == Unit.corpus_id)
         .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
         .where(Embedding.method_id == method_id)
-        .where(Unit.height.between(height_min, height_max))
     )
+    if height_min is not None and height_max is not None:
+        stmt = stmt.where(Unit.height.between(height_min, height_max))
+    if depth_min is not None and depth_max is not None:
+        stmt = stmt.where(Unit.depth.between(depth_min, depth_max))
     if corpus_ids:
         stmt = stmt.where(Unit.corpus_id.in_(corpus_ids))
     if exclude_unit_id is not None:
@@ -80,7 +88,7 @@ def search_semantic(req: SemanticSearchRequest, db: Session = Depends(get_db)):
     query_vec = embed_query(req.query)
     tax_map = build_corpus_taxonomy_map(db)
     results = _vector_search(
-        db, query_vec, method_id, req.height_min, req.height_max, req.corpus_ids, req.limit, tax_map,
+        db, query_vec, method_id, req.height_min, req.height_max, req.depth_min, req.depth_max, req.corpus_ids, req.limit, tax_map,
         offset=req.offset,
     )
     return SearchResponse(results=results, mode="semantic")
@@ -89,18 +97,25 @@ def search_semantic(req: SemanticSearchRequest, db: Session = Depends(get_db)):
 @router.post("/keyword", response_model=SearchResponse)
 def search_keyword(req: KeywordSearchRequest, db: Session = Depends(get_db)):
     tax_map = build_corpus_taxonomy_map(db)
+    if req.corpus_ids is not None and len(req.corpus_ids) == 0:
+        return SearchResponse(results=[], mode="keyword")
     stmt = (
         select(Unit, Corpus.name, CorpusVersion.translation_name)
         .join(Corpus, Corpus.id == Unit.corpus_id)
         .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
-        .where(Unit.text.isnot(None))
         .where(
             or_(
                 Unit.text.ilike(f"%{req.query}%"),
                 Unit.reference_label.ilike(f"%{req.query}%"),
+                Unit.ancestor_path.ilike(f"%{req.query}%"),
+                Corpus.name.ilike(f"%{req.query}%"),
             )
         )
     )
+    if req.height_min is not None and req.height_max is not None:
+        stmt = stmt.where(Unit.height.between(req.height_min, req.height_max))
+    if req.depth_min is not None and req.depth_max is not None:
+        stmt = stmt.where(Unit.depth.between(req.depth_min, req.depth_max))
     if req.corpus_ids:
         stmt = stmt.where(Unit.corpus_id.in_(req.corpus_ids))
     stmt = stmt.offset(req.offset).limit(req.limit)
@@ -145,6 +160,6 @@ def search_passage(req: PassageSearchRequest, db: Session = Depends(get_db)):
     exclude_id = req.unit_id if req.exclude_self else None
     results = _vector_search(
         db, list(vector), method_id, req.height_min, req.height_max,
-        req.corpus_ids, req.limit, tax_map, exclude_id, offset=req.offset,
+        req.depth_min, req.depth_max, req.corpus_ids, req.limit, tax_map, exclude_id, offset=req.offset,
     )
     return SearchResponse(results=results, mode="passage")

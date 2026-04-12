@@ -124,14 +124,41 @@ const MODE_BADGE: Record<SearchMode, string> = {
   passage:  'psg',
 };
 
+interface SearchFilters {
+  corpus_ids?: number[];
+  height_min?: number;
+  height_max?: number;
+  depth_min?: number;
+  depth_max?: number;
+}
+
+interface ActiveSearch {
+  mode: SearchMode;
+  label: string;
+  query?: string;
+  unitId?: number;
+  anchorUnitId?: number;
+  filters: SearchFilters;
+  rawResults: SearchResult[];
+  rawOffset: number;
+  hasMore: boolean;
+}
+
 export interface MapSearchPanelHandle {
   triggerPassageSearch: (unitId: number) => Promise<void>;
 }
 
 export interface MapSearchPanelProps {
   corpora: CorpusInfo[];
-  /** Unit IDs present in the current projection — results are filtered to these. */
-  projectionUnitIds?: globalThis.Set<number> | null;
+  scatterMode: 'height' | 'depth';
+  /** Exact unit IDs currently visible on the map. */
+  visibleUnitIds?: globalThis.Set<number> | null;
+  /** Coarse search filters derived from the layer panel visibility. */
+  visibleCorpusIds?: number[] | null;
+  visibleHeightMin?: number | null;
+  visibleHeightMax?: number | null;
+  visibleDepthMin?: number | null;
+  visibleDepthMax?: number | null;
   /**
    * Called on each search. anchorUnitId is set for passage searches and
    * becomes the hub (index 0) of the constellation in the parent.
@@ -142,7 +169,13 @@ export interface MapSearchPanelProps {
 
 export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelProps>(function MapSearchPanel({
   corpora,
-  projectionUnitIds,
+  scatterMode,
+  visibleUnitIds,
+  visibleCorpusIds,
+  visibleHeightMin,
+  visibleHeightMax,
+  visibleDepthMin,
+  visibleDepthMax,
   onResults,
   onResultHover,
 }, ref) {
@@ -150,10 +183,12 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
   const [textQuery, setTextQuery] = useState('');
   const [selectedUnit, setSelectedUnit] = useState<UnitBrief | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [activeResults, setActiveResults] = useState<SearchResult[] | null>(null);
   const [activeMode, setActiveMode] = useState<SearchMode | null>(null);
+  const [activeSearch, setActiveSearch] = useState<ActiveSearch | null>(null);
   const [expandedIds, setExpandedIds] = useState<globalThis.Set<number>>(new globalThis.Set());
 
   const [history, setHistory] = useState<HistoryEntry[]>(loadHistory);
@@ -163,25 +198,76 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
 
   const allCorpusIds = useMemo(() => corpora.map(c => c.id), [corpora]);
 
+  function filterToVisibleUnits(results: SearchResult[], limit = DISPLAY_LIMIT): SearchResult[] {
+    if (visibleUnitIds == null) return results.slice(0, limit);
+    if (visibleUnitIds.size === 0) return [];
+    return results.filter(r => visibleUnitIds.has(r.id)).slice(0, limit);
+  }
+
+  function buildSearchRequestFilters() {
+    return {
+      corpus_ids: visibleCorpusIds ?? undefined,
+      height_min: scatterMode === 'height' ? visibleHeightMin ?? undefined : undefined,
+      height_max: scatterMode === 'height' ? visibleHeightMax ?? undefined : undefined,
+      depth_min: scatterMode === 'depth' ? visibleDepthMin ?? undefined : undefined,
+      depth_max: scatterMode === 'depth' ? visibleDepthMax ?? undefined : undefined,
+    };
+  }
+
+  function buildSearchRequestBody(
+    mode: SearchMode,
+    query: string,
+    unitId?: number,
+    offset = 0,
+    limit = SEARCH_LIMIT,
+    filters: SearchFilters = buildSearchRequestFilters(),
+  ): any {
+    if (mode === 'passage') {
+      if (unitId == null) throw new Error('Missing passage unit');
+      return {
+        unit_id: unitId,
+        limit,
+        offset,
+        exclude_self: true,
+        ...filters,
+      };
+    }
+    return {
+      query,
+      limit,
+      offset,
+      ...filters,
+    };
+  }
+
   useImperativeHandle(ref, () => ({
     triggerPassageSearch: async (unitId: number) => {
       setMode('passage');
       setActiveResults(null);
       setActiveMode(null);
+      setActiveSearch(null);
       setExpandedIds(new globalThis.Set());
       setError(null);
       onResults([], 'passage', '');
       setIsSearching(true);
       try {
         const unit = await fetchUnit(unitId);
-        const res = await searchPassage({ unit_id: unitId, limit: SEARCH_LIMIT, exclude_self: true });
+        const res = await searchPassage(buildSearchRequestBody('passage', '', unitId, 0, SEARCH_LIMIT));
         const label = unit.reference_label ?? `Unit ${unitId}`;
         setSelectedUnit(unit);
-        const filtered = projectionUnitIds && projectionUnitIds.size > 0
-          ? res.results.filter(r => projectionUnitIds.has(r.id)).slice(0, DISPLAY_LIMIT)
-          : res.results.slice(0, DISPLAY_LIMIT);
+        const filtered = filterToVisibleUnits(res.results);
         setActiveResults(filtered);
         setActiveMode('passage');
+        setActiveSearch({
+          mode: 'passage',
+          label,
+          unitId,
+          anchorUnitId: unitId,
+          filters: buildSearchRequestFilters(),
+          rawResults: res.results,
+          rawOffset: res.results.length,
+          hasMore: res.results.length === SEARCH_LIMIT,
+        });
         setExpandedIds(new globalThis.Set());
         onResults(filtered, 'passage', label, unitId);
         const entry: HistoryEntry = { id: String(Date.now()), mode: 'passage', label, results: filtered, timestamp: Date.now() };
@@ -192,17 +278,20 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
         setIsSearching(false);
       }
     },
-  }), [onResults, projectionUnitIds]);
+  }), [
+    onResults,
+    visibleUnitIds,
+    visibleCorpusIds,
+    visibleHeightMin,
+    visibleHeightMax,
+    visibleDepthMin,
+    visibleDepthMax,
+    scatterMode,
+  ]);
 
   const canSearch =
     !isSearching &&
     (mode === 'passage' ? selectedUnit != null : textQuery.trim().length > 0);
-
-  /** Filter raw API results to only those visible in the projection, then cap at DISPLAY_LIMIT. */
-  const filterToProjection = (results: SearchResult[]): SearchResult[] => {
-    if (!projectionUnitIds || projectionUnitIds.size === 0) return results.slice(0, DISPLAY_LIMIT);
-    return results.filter(r => projectionUnitIds.has(r.id)).slice(0, DISPLAY_LIMIT);
-  };
 
   const commitResults = (results: SearchResult[], searchMode: SearchMode, label: string, anchorUnitId?: number) => {
     setActiveResults(results);
@@ -230,6 +319,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
     setError(null);
     setActiveResults(null);
     setActiveMode(null);
+    setActiveSearch(null);
     setExpandedIds(new globalThis.Set());
     onResults([], newMode, '');
   };
@@ -252,23 +342,38 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
     const unit = overrideUnit ?? selectedUnit;
     setIsSearching(true);
     setError(null);
+    setActiveSearch(null);
     try {
       let res;
       const label =
         mode === 'passage'
           ? (unit!.reference_label ?? `Unit ${unit!.id}`)
           : textQuery.trim();
+      const filters = buildSearchRequestFilters();
+      const query = textQuery.trim();
 
       if (mode === 'semantic') {
-        res = await searchSemantic({ query: textQuery.trim(), limit: SEARCH_LIMIT });
+        res = await searchSemantic(buildSearchRequestBody('semantic', query, undefined, 0, SEARCH_LIMIT));
       } else if (mode === 'keyword') {
-        res = await searchKeyword({ query: textQuery.trim(), limit: SEARCH_LIMIT });
+        res = await searchKeyword(buildSearchRequestBody('keyword', query, undefined, 0, SEARCH_LIMIT));
       } else {
-        res = await searchPassage({ unit_id: unit!.id, limit: SEARCH_LIMIT, exclude_self: true });
+        res = await searchPassage(buildSearchRequestBody('passage', '', unit!.id, 0, SEARCH_LIMIT));
       }
 
       const anchorId = mode === 'passage' ? unit!.id : undefined;
-      commitResults(filterToProjection(res.results), mode, label, anchorId);
+      const filtered = filterToVisibleUnits(res.results);
+      commitResults(filtered, mode, label, anchorId);
+      setActiveSearch({
+        mode,
+        label,
+        query: mode === 'passage' ? undefined : query,
+        unitId: mode === 'passage' ? unit!.id : undefined,
+        anchorUnitId: anchorId,
+        filters,
+        rawResults: res.results,
+        rawOffset: res.results.length,
+        hasMore: res.results.length === SEARCH_LIMIT,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed');
     } finally {
@@ -283,15 +388,27 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
     setSelectedUnit(unit);
     setActiveResults(null);
     setActiveMode(null);
+    setActiveSearch(null);
     setExpandedIds(new globalThis.Set());
     setError(null);
     // Reset parent map state immediately so constellation clears before new results arrive.
     onResults([], 'passage', '');
     setIsSearching(true);
     try {
-      const res = await searchPassage({ unit_id: result.id, limit: SEARCH_LIMIT, exclude_self: true });
+      const res = await searchPassage(buildSearchRequestBody('passage', '', result.id, 0, SEARCH_LIMIT));
       const label = result.reference_label ?? `Unit ${result.id}`;
-      commitResults(filterToProjection(res.results), 'passage', label, result.id);
+      const filtered = filterToVisibleUnits(res.results);
+      commitResults(filtered, 'passage', label, result.id);
+      setActiveSearch({
+        mode: 'passage',
+        label,
+        unitId: result.id,
+        anchorUnitId: result.id,
+        filters: buildSearchRequestFilters(),
+        rawResults: res.results,
+        rawOffset: res.results.length,
+        hasMore: res.results.length === SEARCH_LIMIT,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Search failed');
     } finally {
@@ -299,12 +416,76 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
     }
   };
 
+  const handleLoadMore = async () => {
+    if (!activeSearch || isSearching || isLoadingMore) return;
+
+    const currentVisibleCount = activeResults?.length ?? 0;
+    const cachedVisible = filterToVisibleUnits(activeSearch.rawResults, Number.MAX_SAFE_INTEGER);
+    const cachedNext = cachedVisible.slice(currentVisibleCount, currentVisibleCount + DISPLAY_LIMIT);
+
+    if (cachedNext.length > 0) {
+      const nextResults = [...(activeResults ?? []), ...cachedNext];
+      const nextContext: ActiveSearch = {
+        ...activeSearch,
+        rawResults: activeSearch.rawResults,
+        rawOffset: activeSearch.rawOffset,
+        hasMore: activeSearch.hasMore,
+      };
+      setActiveSearch(nextContext);
+      setActiveResults(nextResults);
+      setActiveMode(activeSearch.mode);
+      onResults(nextResults, activeSearch.mode, activeSearch.label, activeSearch.anchorUnitId);
+      return;
+    }
+
+    if (!activeSearch.hasMore) return;
+
+    setIsLoadingMore(true);
+    setError(null);
+    try {
+      const nextOffset = activeSearch.rawOffset;
+      let page: SearchResult[] = [];
+      if (activeSearch.mode === 'semantic') {
+        page = (await searchSemantic(
+          buildSearchRequestBody('semantic', activeSearch.query ?? '', undefined, nextOffset, SEARCH_LIMIT, activeSearch.filters),
+        )).results;
+      } else if (activeSearch.mode === 'keyword') {
+        page = (await searchKeyword(
+          buildSearchRequestBody('keyword', activeSearch.query ?? '', undefined, nextOffset, SEARCH_LIMIT, activeSearch.filters),
+        )).results;
+      } else {
+        page = (await searchPassage(
+          buildSearchRequestBody('passage', '', activeSearch.unitId, nextOffset, SEARCH_LIMIT, activeSearch.filters),
+        )).results;
+      }
+
+      const rawResults = [...activeSearch.rawResults, ...page];
+      const visible = filterToVisibleUnits(rawResults, Number.MAX_SAFE_INTEGER);
+      const nextResults = visible.slice(currentVisibleCount, currentVisibleCount + DISPLAY_LIMIT);
+      const combined = [...(activeResults ?? []), ...nextResults];
+      const nextContext: ActiveSearch = {
+        ...activeSearch,
+        rawResults,
+        rawOffset: nextOffset + page.length,
+        hasMore: page.length === SEARCH_LIMIT,
+      };
+      setActiveSearch(nextContext);
+      setActiveResults(combined);
+      setActiveMode(activeSearch.mode);
+      onResults(combined, activeSearch.mode, activeSearch.label, activeSearch.anchorUnitId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Search failed');
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
   const handleHistoryClick = (entry: HistoryEntry) => {
-    // Filter stale results from old projection runs to currently visible units.
-    const results = filterToProjection(entry.results);
+    const results = filterToVisibleUnits(entry.results);
     if (results.length === 0) return; // entirely stale — silently skip
     setActiveResults(results);
     setActiveMode(entry.mode);
+    setActiveSearch(null);
     setExpandedIds(new globalThis.Set());
     onResults(results, entry.mode, entry.label);
     setHistoryOpen(false);
@@ -313,6 +494,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
   const handleClearResults = () => {
     setActiveResults(null);
     setActiveMode(null);
+    setActiveSearch(null);
     setExpandedIds(new globalThis.Set());
     onResults([], 'semantic', '');
   };
@@ -326,6 +508,12 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
   };
 
   const showScore = activeMode === 'semantic' || activeMode === 'passage';
+  const visibleLoadedCount = activeSearch ? filterToVisibleUnits(activeSearch.rawResults, Number.MAX_SAFE_INTEGER).length : 0;
+  const canLoadMore =
+    activeSearch != null &&
+    !isSearching &&
+    !isLoadingMore &&
+    (visibleLoadedCount > (activeResults?.length ?? 0) || activeSearch.hasMore);
 
   return (
     <div className={styles.panel}>
@@ -387,7 +575,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
 
       {/* ── Results ── */}
       <div className={styles.content}>
-        {activeResults && activeResults.length > 0 && (
+        {activeResults !== null && (
           <section className={styles.resultsSection}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>Results</span>
@@ -395,25 +583,36 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
               <span className={styles.resultCount}>{activeResults.length}</span>
               <button className={styles.clearBtn} onClick={handleClearResults} title="Clear results">✕</button>
             </div>
-            <div className={styles.resultList}>
-              {activeResults.map((r, i) => (
-                <ResultRow
-                  key={r.id}
-                  result={r}
-                  showScore={showScore}
-                  rank={i + 1}
-                  expanded={expandedIds.has(r.id)}
-                  onToggleExpand={() => toggleExpand(r.id)}
-                  onHover={onResultHover ?? (() => {})}
-                  onFindSimilar={handleFindSimilar}
-                />
-              ))}
-            </div>
+            {activeResults.length > 0 ? (
+              <div className={styles.resultList}>
+                {activeResults.map((r, i) => (
+                  <ResultRow
+                    key={r.id}
+                    result={r}
+                    showScore={showScore}
+                    rank={i + 1}
+                    expanded={expandedIds.has(r.id)}
+                    onToggleExpand={() => toggleExpand(r.id)}
+                    onHover={onResultHover ?? (() => {})}
+                    onFindSimilar={handleFindSimilar}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className={styles.empty}>No results found.</p>
+            )}
+            {canLoadMore && (
+              <div className={styles.loadMoreWrap}>
+                <button
+                  className={styles.loadMoreBtn}
+                  onClick={() => void handleLoadMore()}
+                  disabled={isLoadingMore}
+                >
+                  {isLoadingMore ? 'Loading…' : 'Load more'}
+                </button>
+              </div>
+            )}
           </section>
-        )}
-
-        {activeResults && activeResults.length === 0 && (
-          <p className={styles.empty}>No results found.</p>
         )}
 
         {/* ── History ── */}

@@ -91,8 +91,10 @@ class SearchResponse(BaseModel):
 class SemanticSearchRequest(BaseModel):
     query: str
     method_id: int | None = None
-    height_min: int = 0
-    height_max: int = 0
+    height_min: int | None = None
+    height_max: int | None = None
+    depth_min: int | None = None
+    depth_max: int | None = None
     corpus_ids: list[int] | None = None
     limit: int = 10
     offset: int = 0
@@ -100,6 +102,10 @@ class SemanticSearchRequest(BaseModel):
 
 class KeywordSearchRequest(BaseModel):
     query: str
+    height_min: int | None = None
+    height_max: int | None = None
+    depth_min: int | None = None
+    depth_max: int | None = None
     corpus_ids: list[int] | None = None
     limit: int = 10
     offset: int = 0
@@ -108,8 +114,10 @@ class KeywordSearchRequest(BaseModel):
 class PassageSearchRequest(BaseModel):
     unit_id: int
     method_id: int | None = None
-    height_min: int = 0
-    height_max: int = 0
+    height_min: int | None = None
+    height_max: int | None = None
+    depth_min: int | None = None
+    depth_max: int | None = None
     corpus_ids: list[int] | None = None
     limit: int = 10
     offset: int = 0

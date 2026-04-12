@@ -167,8 +167,45 @@ export function Map() {
         }
       }
     }
-    return set.size > 0 ? set : null;
+    return set;
   }, [resolvedData, resolvedVisibility]);
+
+  const visibleCorpusIds = useMemo(() => {
+    if (!resolvedVisibility) return null;
+    return corpora
+      .filter((corpus) => resolvedVisibility.corpora[corpus.id] !== false)
+      .map((corpus) => corpus.id);
+  }, [corpora, resolvedVisibility]);
+
+  const visibleHeightRange = useMemo(() => {
+    if (!resolvedVisibility || resolvedVisibility.scatterMode !== 'height' || !resolvedData) {
+      return { min: null as number | null, max: null as number | null };
+    }
+    const visibleHeights = resolvedData.manifest.heights.filter((h) => resolvedVisibility.scatter[h] !== false);
+    if (visibleHeights.length === 0) {
+      return { min: null, max: null };
+    }
+    return {
+      min: Math.min(...visibleHeights),
+      max: Math.max(...visibleHeights),
+    };
+  }, [resolvedData, resolvedVisibility]);
+
+  const visibleDepthRange = useMemo(() => {
+    if (!resolvedVisibility || resolvedVisibility.scatterMode !== 'depth' || !resolvedData) {
+      return { min: null as number | null, max: null as number | null };
+    }
+    const visibleDepths = resolvedData.manifest.depths.filter((d) => resolvedVisibility.scatterDepth[d] !== false);
+    if (visibleDepths.length === 0) {
+      return { min: null, max: null };
+    }
+    return {
+      min: Math.min(...visibleDepths),
+      max: Math.max(...visibleDepths),
+    };
+  }, [resolvedData, resolvedVisibility]);
+
+  const searchScatterMode = resolvedVisibility?.scatterMode ?? 'depth';
 
   /**
    * Positions for the constellation. Index 0 = hub (anchor for passage mode,
@@ -182,7 +219,7 @@ export function Map() {
       const ap = unitPositionMap.get(anchorUnitId);
       if (ap) positions.push(ap);
     }
-    for (const r of searchResults.slice(0, 10)) {
+    for (const r of searchResults) {
       const p = unitPositionMap.get(r.id);
       if (p) positions.push(p);
     }
@@ -354,7 +391,13 @@ export function Map() {
         <MapSearchPanel
           ref={searchPanelRef}
           corpora={corpora}
-          projectionUnitIds={visibleUnitIds}
+          scatterMode={searchScatterMode}
+          visibleUnitIds={visibleUnitIds}
+          visibleCorpusIds={visibleCorpusIds}
+          visibleHeightMin={visibleHeightRange.min}
+          visibleHeightMax={visibleHeightRange.max}
+          visibleDepthMin={visibleDepthRange.min}
+          visibleDepthMax={visibleDepthRange.max}
           onResults={handleSearchResults}
           onResultHover={handleResultHover}
         />

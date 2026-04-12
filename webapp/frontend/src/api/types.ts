@@ -72,6 +72,8 @@ export interface SemanticSearchRequest {
   method_id?: number
   height_min?: number
   height_max?: number
+  depth_min?: number
+  depth_max?: number
   corpus_ids?: number[]
   limit?: number
   offset?: number
@@ -79,6 +81,10 @@ export interface SemanticSearchRequest {
 
 export interface KeywordSearchRequest {
   query: string
+  height_min?: number
+  height_max?: number
+  depth_min?: number
+  depth_max?: number
   corpus_ids?: number[]
   limit?: number
   offset?: number
@@ -89,6 +95,8 @@ export interface PassageSearchRequest {
   method_id?: number
   height_min?: number
   height_max?: number
+  depth_min?: number
+  depth_max?: number
   corpus_ids?: number[]
   limit?: number
   offset?: number

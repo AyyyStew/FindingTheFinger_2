@@ -47,6 +47,7 @@ def search_units(
             or_(
                 Unit.reference_label.ilike(f"%{q}%"),
                 Unit.text.ilike(f"%{q}%"),
+                Unit.ancestor_path.ilike(f"%{q}%"),
                 Corpus.name.ilike(f"%{q}%"),
             )
         )
