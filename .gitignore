@@ -28,6 +28,7 @@ data/Indic_Dharmic/Sikhism
 *.pkl
 *.sqldata
 *.sql.zip
+/scripts/analysis/output/
 
 # ===== OS =====
 .DS_Store
