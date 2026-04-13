@@ -12,7 +12,7 @@
 }
 
 .title {
-  composes: sectionLabel from '../../styles/primitives.module.css';
+  composes: sectionLabel from "../../styles/primitives.module.css";
   color: var(--color-text-muted);
   letter-spacing: var(--tracking-wide);
   margin: 0;
@@ -83,6 +83,10 @@
   flex-shrink: 0;
 }
 
+.checkRight {
+  margin-left: auto;
+}
+
 .heightLabel {
   font-size: var(--text-xs);
   color: var(--color-text-primary);
@@ -101,7 +105,8 @@
 .traditionList {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0-5);
+  gap: var(--space-1);
+  --tree-line-color: var(--color-text-muted);
 }
 
 .expandBtn {
@@ -115,6 +120,13 @@
   flex-shrink: 0;
   line-height: 1;
   text-align: center;
+  transition:
+    color var(--ease-fast),
+    transform var(--ease-fast);
+}
+
+.expandBtn:hover {
+  color: var(--color-text-primary);
 }
 
 .groupLabel {
@@ -134,14 +146,17 @@
 }
 
 .soloBtn {
-  composes: chip from '../../styles/primitives.module.css';
+  composes: chip from "../../styles/primitives.module.css";
   background: transparent;
   border: none;
   color: var(--color-text-muted);
   cursor: pointer;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity var(--ease-fast), color var(--ease-fast), background var(--ease-fast);
+  transition:
+    opacity var(--ease-fast),
+    color var(--ease-fast),
+    background var(--ease-fast);
 }
 
 .traditionRow:hover .soloBtn,
@@ -159,14 +174,16 @@
 .traditionBlock {
   display: flex;
   flex-direction: column;
+  gap: 0;
   --tradition-color: var(--color-text-primary);
 }
 
 .traditionRow {
   display: flex;
   align-items: center;
-  gap: var(--space-0-75);
-  padding: var(--space-0-5) var(--space-1);
+  gap: var(--space-1);
+  min-height: var(--control-height-sm);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   transition: background var(--ease-fast);
 }
@@ -180,26 +197,60 @@
   font-weight: var(--weight-medium);
 }
 
-.traditionDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.subGroupList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-left: var(--space-2);
+  padding-left: var(--space-3);
 }
 
 .subGroupBlock {
   display: flex;
   flex-direction: column;
-  padding-left: var(--space-5);
+  gap: var(--space-0-5);
+  padding-left: 0;
+  position: relative;
+}
+
+.subGroupBlock::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-3) * -1);
+  top: calc(var(--space-1) * -1);
+  bottom: calc(var(--space-1) * -1);
+  width: 1px;
+  background: var(--tree-line-color);
+}
+
+.subGroupBlock:last-child::before {
+  bottom: auto;
+  height: calc((var(--control-height-sm) / 2) + var(--space-1));
 }
 
 .subGroupRow {
   display: flex;
   align-items: center;
-  gap: var(--space-0-75);
-  padding: var(--space-0-5) var(--space-1);
+  gap: var(--space-1);
+  min-height: var(--control-height-sm);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   transition: background var(--ease-fast);
+  position: relative;
+}
+
+.subGroupRow::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-3) * -1);
+  top: 50%;
+  width: var(--space-3);
+  height: 1px;
+  background: var(--tree-line-color);
+}
+
+.subGroupRow::after {
+  content: none;
 }
 
 .subGroupRow:hover {
@@ -214,19 +265,58 @@
 .corpusList {
   list-style: none;
   margin: 0;
-  padding: 0 0 0 var(--space-5);
+  padding: 0 0 0 var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-left: var(--space-2);
+}
+
+.corpusBlock {
   display: flex;
   flex-direction: column;
   gap: var(--space-0-5);
+  position: relative;
+}
+
+.corpusBlock::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-3) * -1);
+  top: calc(var(--space-1) * -1);
+  bottom: calc(var(--space-1) * -1);
+  width: 1px;
+  background: var(--tree-line-color);
+}
+
+.corpusBlock:last-child::before {
+  bottom: auto;
+  height: calc((var(--control-height-sm) / 2) + var(--space-1));
 }
 
 .corpusItem {
   display: flex;
   align-items: center;
-  gap: var(--space-0-75);
-  padding: 1px var(--space-1);
+  gap: var(--space-1);
+  min-height: var(--control-height-sm);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   transition: background var(--ease-fast);
+  position: relative;
+}
+
+.corpusItem::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-3) * -1);
+  top: 50%;
+  width: var(--space-3);
+  height: 1px;
+  background: var(--tree-line-color);
+}
+
+.corpusItem::after {
+  content: none;
 }
 
 .corpusItem:hover {
@@ -250,6 +340,72 @@
   white-space: nowrap;
 }
 
+.versionList {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-left: var(--space-2);
+}
+
+.versionItem {
+  border-radius: var(--radius-sm);
+  position: relative;
+}
+
+.versionItem::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-3) * -1);
+  top: 50%;
+  width: var(--space-3);
+  height: 1px;
+  background: var(--tree-line-color);
+}
+
+.versionItem::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-3) * -1);
+  top: calc(var(--space-1) * -1);
+  bottom: calc(var(--space-1) * -1);
+  width: 1px;
+  background: var(--tree-line-color);
+}
+
+.versionItem:last-child::after {
+  bottom: auto;
+  height: calc((var(--control-height-sm) / 2) + var(--space-1));
+}
+
+.versionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-height-sm);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: background var(--ease-fast);
+  cursor: pointer;
+  position: relative;
+}
+
+.versionRow::before {
+  content: none;
+}
+
+.versionRow:hover {
+  background: var(--color-surface-hover);
+}
+
+.versionName {
+  font-size: var(--text-xs);
+  color: var(--color-text-primary);
+  flex: 1;
+}
+
 .meta {
   margin-top: auto;
   padding-top: var(--space-4);
@@ -260,7 +416,7 @@
 }
 
 .metaLabel {
-  composes: sectionLabel from '../../styles/primitives.module.css';
+  composes: sectionLabel from "../../styles/primitives.module.css";
   color: var(--color-text-muted);
 }
 
@@ -273,16 +429,16 @@
 }
 
 .modeToggle {
-  composes: segmentedControl from '../../styles/primitives.module.css';
+  composes: segmentedControl from "../../styles/primitives.module.css";
   margin-bottom: var(--space-2);
 }
 
 .modeBtn {
-  composes: segmentedControlButton from '../../styles/primitives.module.css';
+  composes: segmentedControlButton from "../../styles/primitives.module.css";
   min-height: var(--control-height-sm);
   padding: 0 var(--space-1);
 }
 
 .modeBtnActive {
-  composes: segmentedControlButtonActive from '../../styles/primitives.module.css';
+  composes: segmentedControlButtonActive from "../../styles/primitives.module.css";
 }

@@ -67,6 +67,46 @@ function hslDimStr({ h, s, l }: HSL): string {
   return `hsla(${Math.round(h)}, ${Math.round(s)}%, ${Math.round(l)}%, 0.15)`;
 }
 
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
+function resolveTaxonomyHsl(
+  chain: TaxonomyLabel[] | null | undefined,
+): HSL {
+  if (!chain || !Array.isArray(chain) || chain.length === 0) {
+    return { ...FALLBACK };
+  }
+  const sorted = chain.slice().sort((a, b) => a.level - b.level);
+
+  const root = sorted.find((t) => t.level === 0);
+  if (!root) return { ...FALLBACK };
+
+  const rootLower = root.name.toLowerCase();
+  const base = ROOT_COLORS.find((rc) =>
+    rc.keywords.some((kw) => rootLower.includes(kw)),
+  );
+  let hsl: HSL = base ? { ...base.hsl } : { ...FALLBACK };
+
+  if (TAXONOMY_COLOR_MODE === "shifted") {
+    const l1 = sorted.find((t) => t.level === 1);
+    if (l1) {
+      const h1 = nameHash(l1.name);
+      const shift = (h1 % L1_HUE_RANGE) - L1_HUE_CENTER;
+      hsl = { ...hsl, h: (hsl.h + shift + 360) % 360 };
+    }
+
+    const l2 = sorted.find((t) => t.level === 2);
+    if (l2) {
+      const h2 = nameHash(l2.name);
+      const shift = (h2 % L2_LIGHT_RANGE) - L2_LIGHT_CENTER;
+      hsl = { ...hsl, l: clamp(hsl.l + shift, 22, 72) };
+    }
+  }
+
+  return hsl;
+}
+
 /**
  * Given the full taxonomy ancestor chain for a corpus/result,
  * returns a { solid, dim } color pair.
@@ -78,37 +118,27 @@ function hslDimStr({ h, s, l }: HSL): string {
 export function getTaxonomyColor(
   chain: TaxonomyLabel[] | null | undefined,
 ): TaxonomyColor {
-  if (!chain || !Array.isArray(chain) || chain.length === 0) {
-    return { solid: hslStr(FALLBACK), dim: hslDimStr(FALLBACK) };
-  }
-  const sorted = chain.slice().sort((a, b) => a.level - b.level);
-
-  const root = sorted.find((t) => t.level === 0);
-  if (!root) return { solid: hslStr(FALLBACK), dim: hslDimStr(FALLBACK) };
-
-  const rootLower = root.name.toLowerCase();
-  const base = ROOT_COLORS.find((rc) =>
-    rc.keywords.some((kw) => rootLower.includes(kw)),
-  );
-  let hsl: HSL = base ? { ...base.hsl } : { ...FALLBACK };
-
-  if (TAXONOMY_COLOR_MODE === "shifted") {
-    // Level 1 → hue shift ±25°
-    const l1 = sorted.find((t) => t.level === 1);
-    if (l1) {
-      const h1 = nameHash(l1.name);
-      const shift = (h1 % L1_HUE_RANGE) - L1_HUE_CENTER;
-      hsl = { ...hsl, h: (hsl.h + shift + 360) % 360 };
-    }
-
-    // Level 2 → lightness shift ±12%
-    const l2 = sorted.find((t) => t.level === 2);
-    if (l2) {
-      const h2 = nameHash(l2.name);
-      const shift = (h2 % L2_LIGHT_RANGE) - L2_LIGHT_CENTER;
-      hsl = { ...hsl, l: Math.max(22, Math.min(72, hsl.l + shift)) };
-    }
-  }
-
+  const hsl = resolveTaxonomyHsl(chain);
   return { solid: hslStr(hsl), dim: hslDimStr(hsl) };
+}
+
+/**
+ * Deterministic color variant for translations of the same corpus.
+ * Keeps family resemblance to taxonomy color while separating individual versions.
+ */
+export function getTranslationColor(
+  chain: TaxonomyLabel[] | null | undefined,
+  translationKey: string,
+): TaxonomyColor {
+  const base = resolveTaxonomyHsl(chain);
+  const h = nameHash(translationKey.trim().toLowerCase());
+  const hueShift = (h % 37) - 18; // ±18°
+  const satShift = ((h >> 6) % 15) - 7; // ±7%
+  const lightShift = ((h >> 10) % 17) - 8; // ±8%
+  const variant: HSL = {
+    h: (base.h + hueShift + 360) % 360,
+    s: clamp(base.s + satShift, 28, 96),
+    l: clamp(base.l + lightShift + 6, 24, 78),
+  };
+  return { solid: hslStr(variant), dim: hslDimStr(variant) };
 }

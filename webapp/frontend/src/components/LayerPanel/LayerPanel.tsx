@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import type { CorpusInfo, TaxonomyLabel } from "../../api/types";
 import type { ProjectionManifest } from "../../utils/projectionLoader";
 import type { MapVisibility } from "../../utils/mapLayers";
-import { getTaxonomyColor } from "../../utils/taxonomyColors";
+import { getTaxonomyColor, getTranslationColor } from "../../utils/taxonomyColors";
 import styles from "./LayerPanel.module.css";
 
 interface LayerPanelProps {
@@ -34,7 +34,12 @@ export function LayerPanel({
   const [expandedSubGroups, setExpandedSubGroups] = useState<Set<number>>(
     new Set(),
   );
+  const [expandedCorpora, setExpandedCorpora] = useState<Set<number>>(new Set());
   const initializedRef = useRef(false);
+  const manifestVersionIds = useMemo(
+    () => new Set(manifest.corpus_version_ids),
+    [manifest.corpus_version_ids],
+  );
 
   // Expand both levels by default once corpora load.
   useEffect(() => {
@@ -42,15 +47,25 @@ export function LayerPanel({
     initializedRef.current = true;
     const tIds = new Set<number>();
     const sIds = new Set<number>();
+    const cIds = new Set<number>();
     for (const corpus of corpora) {
       const root = corpus.taxonomy.find((t) => t.level === 0);
       const sub = corpus.taxonomy.find((t) => t.level === 1);
+      const translationCount = corpus.versions.filter(
+        (v) =>
+          manifestVersionIds.has(v.id) &&
+          (v.translation_name ?? "").trim().length > 0,
+      ).length;
       if (root) tIds.add(root.id);
       if (sub) sIds.add(sub.id);
+      // If exactly one translation exists, start collapsed so the single
+      // translation leaf is hidden by default.
+      if (translationCount !== 1) cIds.add(corpus.id);
     }
     setExpandedTraditions(tIds);
     setExpandedSubGroups(sIds);
-  }, [corpora]);
+    setExpandedCorpora(cIds);
+  }, [corpora, manifestVersionIds]);
 
   // ── Two-level tradition grouping ──────────────────────────────────────────
 
@@ -105,6 +120,13 @@ export function LayerPanel({
     for (const c of groupCorpora) next[c.id] = !allVis;
     setCorpora(next);
   };
+
+  const isVersionVisible = (id: number) => visibility.corpusVersions[id] !== false;
+  const toggleVersion = (id: number) =>
+    onChange({
+      ...visibility,
+      corpusVersions: { ...visibility.corpusVersions, [id]: !isVersionVisible(id) },
+    });
 
   const soloGroup = (groupCorpora: CorpusInfo[]) => {
     const groupIds = new Set(groupCorpora.map((c) => c.id));
@@ -182,36 +204,8 @@ export function LayerPanel({
                 <div key={tg.root.id} className={styles.traditionBlock}>
                   {/* Level-0 row */}
                   <div className={styles.traditionRow}>
-                    <span
-                      className={styles.traditionDot}
-                      style={{ background: traditionSolid }}
-                    />
-                    <label className={styles.groupLabel}>
-                      <input
-                        type="checkbox"
-                        className={styles.check}
-                        checked={tAllVis}
-                        ref={(el) => {
-                          if (el) el.indeterminate = !tAllVis && !tNoneVis;
-                        }}
-                        onChange={() => toggleGroup(tgCorpora)}
-                      />
-                      <span
-                        className={styles.groupName}
-                        title={tg.root.name}
-                        style={{ color: traditionSolid }}
-                      >
-                        {tg.root.name}
-                      </span>
-                    </label>
                     <button
-                      className={`${styles.soloBtn} ${tSoloed ? styles.soloBtnActive : ""}`}
-                      onClick={() => soloGroup(tgCorpora)}
-                    >
-                      solo
-                    </button>
-                    <button
-                      className={styles.expandBtn}
+                      className={`${styles.expandBtn} ${tExpanded ? styles.expandBtnExpanded : ""}`}
                       onClick={() =>
                         toggleExpand(
                           expandedTraditions,
@@ -222,11 +216,36 @@ export function LayerPanel({
                     >
                       {tExpanded ? "▾" : "▸"}
                     </button>
+                    <div className={styles.groupLabel}>
+                      <span
+                        className={styles.groupName}
+                        title={tg.root.name}
+                        style={{ color: traditionSolid }}
+                      >
+                        {tg.root.name}
+                      </span>
+                    </div>
+                    <button
+                      className={`${styles.soloBtn} ${tSoloed ? styles.soloBtnActive : ""}`}
+                      onClick={() => soloGroup(tgCorpora)}
+                    >
+                      solo
+                    </button>
+                    <input
+                      type="checkbox"
+                      className={`${styles.check} ${styles.checkRight}`}
+                      checked={tAllVis}
+                      ref={(el) => {
+                        if (el) el.indeterminate = !tAllVis && !tNoneVis;
+                      }}
+                      onChange={() => toggleGroup(tgCorpora)}
+                    />
                   </div>
 
                   {/* Level-1 sub-groups */}
-                  {tExpanded &&
-                    tg.subGroups.map((sg) => {
+                  {tExpanded && (
+                    <div className={styles.subGroupList}>
+                      {tg.subGroups.map((sg) => {
                       const { solid: subGroupSolid } = getTaxonomyColor(
                         sg.corpora[0]?.taxonomy ?? [],
                       );
@@ -256,33 +275,8 @@ export function LayerPanel({
                               } as React.CSSProperties
                             }
                           >
-                            <label className={styles.groupLabel}>
-                              <input
-                                type="checkbox"
-                                className={styles.check}
-                                checked={sgAllVis}
-                                ref={(el) => {
-                                  if (el)
-                                    el.indeterminate = !sgAllVis && !sgNoneVis;
-                                }}
-                                onChange={() => toggleGroup(sg.corpora)}
-                              />
-                              <span
-                                className={styles.groupName}
-                                title={sg.node.name}
-                                style={{ color: subGroupSolid }}
-                              >
-                                {sg.node.name}
-                              </span>
-                            </label>
                             <button
-                              className={`${styles.soloBtn} ${sgSoloed ? styles.soloBtnActive : ""}`}
-                              onClick={() => soloGroup(sg.corpora)}
-                            >
-                              solo
-                            </button>
-                            <button
-                              className={styles.expandBtn}
+                              className={`${styles.expandBtn} ${sgExpanded ? styles.expandBtnExpanded : ""}`}
                               onClick={() =>
                                 toggleExpand(
                                   expandedSubGroups,
@@ -293,6 +287,31 @@ export function LayerPanel({
                             >
                               {sgExpanded ? "▾" : "▸"}
                             </button>
+                            <div className={styles.groupLabel}>
+                              <span
+                                className={styles.groupName}
+                                title={sg.node.name}
+                                style={{ color: subGroupSolid }}
+                              >
+                                {sg.node.name}
+                              </span>
+                            </div>
+                            <button
+                              className={`${styles.soloBtn} ${sgSoloed ? styles.soloBtnActive : ""}`}
+                              onClick={() => soloGroup(sg.corpora)}
+                            >
+                              solo
+                            </button>
+                            <input
+                              type="checkbox"
+                              className={`${styles.check} ${styles.checkRight}`}
+                              checked={sgAllVis}
+                              ref={(el) => {
+                                if (el)
+                                  el.indeterminate = !sgAllVis && !sgNoneVis;
+                              }}
+                              onChange={() => toggleGroup(sg.corpora)}
+                            />
                           </div>
 
                           {/* Corpora */}
@@ -303,42 +322,146 @@ export function LayerPanel({
                                   corpus.taxonomy,
                                 );
                                 const visible = isCorpusVisible(corpus.id);
+                                const corpusExpanded = expandedCorpora.has(corpus.id);
                                 const cSoloed =
                                   visible &&
                                   corpora
                                     .filter((c) => c.id !== corpus.id)
                                     .every((c) => !isCorpusVisible(c.id));
+                                const corpusVersionsInRun = corpus.versions.filter(
+                                  (v) => manifestVersionIds.has(v.id),
+                                );
+                                const translationVersions =
+                                  corpusVersionsInRun.filter(
+                                    (v) =>
+                                      (v.translation_name ?? "").trim().length > 0,
+                                  );
+                                const baseVersions = corpusVersionsInRun.filter(
+                                  (v) =>
+                                    (v.translation_name ?? "").trim().length === 0,
+                                );
                                 return (
                                   <li
                                     key={corpus.id}
-                                    className={styles.corpusItem}
+                                    className={styles.corpusBlock}
                                     style={
                                       {
                                         "--tradition-color": corpusSolid,
                                       } as React.CSSProperties
                                     }
                                   >
-                                    <label className={styles.corpusRow}>
+                                    <div className={styles.corpusItem}>
+                                      {corpusVersionsInRun.length > 0 && (
+                                        <button
+                                          className={`${styles.expandBtn} ${corpusExpanded ? styles.expandBtnExpanded : ""}`}
+                                          onClick={() =>
+                                            toggleExpand(
+                                              expandedCorpora,
+                                              corpus.id,
+                                              setExpandedCorpora,
+                                            )
+                                          }
+                                        >
+                                          {corpusExpanded ? "▾" : "▸"}
+                                        </button>
+                                      )}
+                                      <div className={styles.corpusRow}>
+                                        <span
+                                          className={styles.corpusName}
+                                          title={corpus.name}
+                                          style={{ color: corpusSolid }}
+                                        >
+                                          {corpus.name}
+                                        </span>
+                                      </div>
+                                      <button
+                                        className={`${styles.soloBtn} ${cSoloed ? styles.soloBtnActive : ""}`}
+                                        onClick={() => soloCorpus(corpus.id)}
+                                      >
+                                        solo
+                                      </button>
                                       <input
                                         type="checkbox"
-                                        className={styles.check}
+                                        className={`${styles.check} ${styles.checkRight}`}
                                         checked={visible}
                                         onChange={() => toggleCorpus(corpus.id)}
                                       />
-                                      <span
-                                        className={styles.corpusName}
-                                        title={corpus.name}
-                                        style={{ color: corpusSolid }}
-                                      >
-                                        {corpus.name}
-                                      </span>
-                                    </label>
-                                    <button
-                                      className={`${styles.soloBtn} ${cSoloed ? styles.soloBtnActive : ""}`}
-                                      onClick={() => soloCorpus(corpus.id)}
-                                    >
-                                      solo
-                                    </button>
+                                    </div>
+
+                                    {corpusExpanded && corpusVersionsInRun.length > 0 && (
+                                      <ul className={styles.versionList}>
+                                        {baseVersions.map((version) => {
+                                          const versionLabel = `corpus version ${version.id}`;
+                                          const versionVisible = isVersionVisible(
+                                            version.id,
+                                          );
+                                          return (
+                                            <li
+                                              key={version.id}
+                                              className={styles.versionItem}
+                                            >
+                                              <div className={styles.versionRow}>
+                                                <span
+                                                  className={styles.versionName}
+                                                  title={versionLabel}
+                                                  style={{ color: corpusSolid }}
+                                                >
+                                                  {versionLabel}
+                                                </span>
+                                                <input
+                                                  type="checkbox"
+                                                  className={`${styles.check} ${styles.checkRight}`}
+                                                  checked={versionVisible}
+                                                  onChange={() =>
+                                                    toggleVersion(version.id)
+                                                  }
+                                                />
+                                              </div>
+                                            </li>
+                                          );
+                                        })}
+
+                                        {translationVersions.map((version) => {
+                                          const versionLabel =
+                                            version.translation_name ??
+                                            `translation ${version.id}`;
+                                          const versionVisible = isVersionVisible(
+                                            version.id,
+                                          );
+                                          const { solid: translationSolid } =
+                                            getTranslationColor(
+                                              corpus.taxonomy,
+                                              `${version.id}:${versionLabel}`,
+                                            );
+                                          return (
+                                            <li
+                                              key={version.id}
+                                              className={styles.versionItem}
+                                            >
+                                              <div className={styles.versionRow}>
+                                                <span
+                                                  className={styles.versionName}
+                                                  title={versionLabel}
+                                                  style={{
+                                                    color: translationSolid,
+                                                  }}
+                                                >
+                                                  {versionLabel}
+                                                </span>
+                                                <input
+                                                  type="checkbox"
+                                                  className={`${styles.check} ${styles.checkRight}`}
+                                                  checked={versionVisible}
+                                                  onChange={() =>
+                                                    toggleVersion(version.id)
+                                                  }
+                                                />
+                                              </div>
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    )}
                                   </li>
                                 );
                               })}
@@ -346,7 +469,9 @@ export function LayerPanel({
                           )}
                         </div>
                       );
-                    })}
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
