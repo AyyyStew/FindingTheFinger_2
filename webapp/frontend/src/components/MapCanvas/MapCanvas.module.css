@@ -13,10 +13,55 @@
   width: 86px;
   height: 86px;
   border-radius: 10px;
-  background: rgb(8 12 20 / 72%);
-  border: 1px solid rgb(255 255 255 / 18%);
+  background: color-mix(in srgb, var(--color-surface) 86%, transparent);
+  border: 1px solid var(--color-border);
   backdrop-filter: blur(2px);
   pointer-events: none;
+}
+
+.controlsBar {
+  position: absolute;
+  left: 14px;
+  right: 112px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(2px);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  pointer-events: none;
+}
+
+.controlsLabel {
+  color: var(--color-text-primary);
+  font-weight: var(--weight-semibold);
+  margin-right: var(--space-1);
+}
+
+.controlItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-75);
+  white-space: nowrap;
+}
+
+.controlItem kbd {
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: var(--color-surface-alt);
+  padding: 2px 5px;
 }
 
 .axisSvg {
@@ -30,4 +75,11 @@
   letter-spacing: 0.25px;
   text-anchor: middle;
   dominant-baseline: middle;
+}
+
+@media (max-width: 960px) {
+  .controlsBar {
+    right: 14px;
+    bottom: 106px;
+  }
 }

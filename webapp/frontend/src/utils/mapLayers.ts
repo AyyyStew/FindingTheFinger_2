@@ -6,12 +6,21 @@
  * follow the same pattern and slot into buildAllLayers().
  */
 
-import { Delaunay } from 'd3-delaunay';
-import { ScatterplotLayer, LineLayer, SolidPolygonLayer, TextLayer } from '@deck.gl/layers';
-import type { Layer } from '@deck.gl/core';
-import type { CorpusInfo } from '../api/types';
-import { getTaxonomyColor } from './taxonomyColors';
-import type { DepthLayerData, HeightLayerData, StandardRunData } from './projectionLoader';
+import { Delaunay } from "d3-delaunay";
+import {
+  ScatterplotLayer,
+  LineLayer,
+  SolidPolygonLayer,
+  TextLayer,
+} from "@deck.gl/layers";
+import type { Layer } from "@deck.gl/core";
+import type { CorpusInfo } from "../api/types";
+import { getTaxonomyColor } from "./taxonomyColors";
+import type {
+  DepthLayerData,
+  HeightLayerData,
+  StandardRunData,
+} from "./projectionLoader";
 
 // ── Visibility state ──────────────────────────────────────────────────────────
 //
@@ -19,7 +28,7 @@ import type { DepthLayerData, HeightLayerData, StandardRunData } from './project
 
 export interface MapVisibility {
   /** Whether scatter points are grouped by height-from-leaf or depth-from-root. */
-  scatterMode: 'height' | 'depth';
+  scatterMode: "height" | "depth";
   /** height → visible. Leaves (h=0) on by default. */
   scatter: Record<number, boolean>;
   /** depth → visible. All depths on by default. */
@@ -28,7 +37,7 @@ export interface MapVisibility {
   corpora: Record<number, boolean>;
 }
 
-export type KdeBreakdown = 'overall' | 'corpus';
+export type KdeBreakdown = "overall" | "corpus";
 
 export interface MapOverlayOptions {
   voronoi: boolean;
@@ -45,17 +54,20 @@ export const DEFAULT_OVERLAY_OPTIONS: MapOverlayOptions = {
   kde: false,
   labels: false,
   hidePoints: false,
-  kdeBreakdown: 'overall',
+  kdeBreakdown: "overall",
   labelCorpus: true,
   labelDepths: [],
 };
 
-export function defaultVisibility(heights: number[], depths: number[]): MapVisibility {
+export function defaultVisibility(
+  heights: number[],
+  depths: number[],
+): MapVisibility {
   const scatter: Record<number, boolean> = {};
   for (const h of heights) scatter[h] = h === 0; // leaves on by default
   const scatterDepth: Record<number, boolean> = {};
   for (const d of depths) scatterDepth[d] = true; // all depths on by default
-  return { scatterMode: 'depth', scatter, scatterDepth, corpora: {} };
+  return { scatterMode: "depth", scatter, scatterDepth, corpora: {} };
 }
 
 // ── Color map ─────────────────────────────────────────────────────────────────
@@ -91,17 +103,42 @@ function hslStringToRgb(hsl: string): [number, number, number] {
   return hslToRgb255(h, s, l);
 }
 
-function hslToRgb255(h: number, s: number, l: number): [number, number, number] {
+function hslToRgb255(
+  h: number,
+  s: number,
+  l: number,
+): [number, number, number] {
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
   const m = l - c / 2;
-  let r = 0, g = 0, b = 0;
-  if      (h < 60)  { r = c; g = x; b = 0; }
-  else if (h < 120) { r = x; g = c; b = 0; }
-  else if (h < 180) { r = 0; g = c; b = x; }
-  else if (h < 240) { r = 0; g = x; b = c; }
-  else if (h < 300) { r = x; g = 0; b = c; }
-  else              { r = c; g = 0; b = x; }
+  let r = 0,
+    g = 0,
+    b = 0;
+  if (h < 60) {
+    r = c;
+    g = x;
+    b = 0;
+  } else if (h < 120) {
+    r = x;
+    g = c;
+    b = 0;
+  } else if (h < 180) {
+    r = 0;
+    g = c;
+    b = x;
+  } else if (h < 240) {
+    r = 0;
+    g = x;
+    b = c;
+  } else if (h < 300) {
+    r = x;
+    g = 0;
+    b = c;
+  } else {
+    r = c;
+    g = 0;
+    b = x;
+  }
   return [
     Math.round((r + m) * 255),
     Math.round((g + m) * 255),
@@ -126,14 +163,23 @@ function buildPointStyleArrays(
     const corpusId = layer.corpusIds[i];
     const selected = selectedUnitIds?.has(unitIds[i]) ?? false;
     const [r, g, b] = colorMap.get(corpusId) ?? fallback;
-    fillColors[i * 4]     = selected ? 201 : r;
+    fillColors[i * 4] = selected ? 201 : r;
     fillColors[i * 4 + 1] = selected ? 169 : g;
     fillColors[i * 4 + 2] = selected ? 110 : b;
-    fillColors[i * 4 + 3] = hiddenCorpora.has(corpusId) ? 0 : (selected ? 235 : alpha);
-    lineColors[i * 4]     = selected ? 255 : r;
-    lineColors[i * 4 + 1] = selected ? 243 : g;
-    lineColors[i * 4 + 2] = selected ? 209 : b;
-    lineColors[i * 4 + 3] = hiddenCorpora.has(corpusId) ? 0 : (selected ? 235 : 0);
+    fillColors[i * 4 + 3] = hiddenCorpora.has(corpusId)
+      ? 0
+      : selected
+        ? 235
+        : alpha;
+    // Softer edge than pure black: subtle charcoal border for dense clouds.
+    lineColors[i * 4] = selected ? 255 : 30;
+    lineColors[i * 4 + 1] = selected ? 243 : 34;
+    lineColors[i * 4 + 2] = selected ? 209 : 42;
+    lineColors[i * 4 + 3] = hiddenCorpora.has(corpusId)
+      ? 0
+      : selected
+        ? 235
+        : Math.min(alpha, 145);
   }
   return { fillColors, lineColors };
 }
@@ -159,13 +205,13 @@ export function buildScatterLayers(
       .map(([k]) => Number(k)),
   );
   return data.manifest.heights
-    .filter(h => visibility.scatter[h] !== false)
-    .map(h => {
+    .filter((h) => visibility.scatter[h] !== false)
+    .map((h) => {
       const layer = data.layers.get(h)!;
       // Leaves: small + semi-transparent so density is visible.
       // Parents: larger, more opaque — rendered on top via layer order.
-      const alpha  = h === 0 ? 180 : 230;
-      const radius = h === 0 ? 3   : 4 + h * 3;
+      const alpha = h === 0 ? 180 : 230;
+      const radius = h === 0 ? 3 : 4 + h * 3;
       const { fillColors, lineColors } = buildPointStyleArrays(
         layer,
         colorMap,
@@ -187,15 +233,22 @@ export function buildScatterLayers(
           },
         },
         getRadius: radius,
-        radiusUnits: 'pixels',
+        radiusUnits: "pixels",
         radiusMinPixels: MIN_POINT_RADIUS_PX,
         billboard: true,
         pickable: true,
         stroked: true,
-        lineWidthUnits: 'pixels',
+        lineWidthUnits: "pixels",
         lineWidthMinPixels: 1,
         parameters: { depthTest: false },
-        updateTriggers: { getFillColor: [colorMap.size, alpha, visibility.corpora, selectedUnitIds?.size ?? 0] },
+        updateTriggers: {
+          getFillColor: [
+            colorMap.size,
+            alpha,
+            visibility.corpora,
+            selectedUnitIds?.size ?? 0,
+          ],
+        },
       });
     });
 }
@@ -221,15 +274,15 @@ export function buildDepthScatterLayers(
 
   const maxDepth = data.manifest.max_depth;
   return data.manifest.depths
-    .filter(d => visibility.scatterDepth[d] !== false)
-    .map(d => {
+    .filter((d) => visibility.scatterDepth[d] !== false)
+    .map((d) => {
       const layer = data.depthLayers.get(d) as DepthLayerData;
       if (!layer) return null;
       // Deepest depth = leaves: small + semi-transparent.
       // Shallower depths = parents: larger, more opaque.
       const distFromLeaf = maxDepth - d;
-      const alpha  = distFromLeaf === 0 ? 180 : 230;
-      const radius = distFromLeaf === 0 ? 3   : 4 + distFromLeaf * 3;
+      const alpha = distFromLeaf === 0 ? 180 : 230;
+      const radius = distFromLeaf === 0 ? 3 : 4 + distFromLeaf * 3;
       const { fillColors, lineColors } = buildPointStyleArrays(
         layer,
         colorMap,
@@ -250,15 +303,22 @@ export function buildDepthScatterLayers(
           },
         },
         getRadius: radius,
-        radiusUnits: 'pixels',
+        radiusUnits: "pixels",
         radiusMinPixels: MIN_POINT_RADIUS_PX,
         billboard: true,
         pickable: true,
         stroked: true,
-        lineWidthUnits: 'pixels',
+        lineWidthUnits: "pixels",
         lineWidthMinPixels: 1,
         parameters: { depthTest: false },
-        updateTriggers: { getFillColor: [colorMap.size, alpha, visibility.corpora, selectedUnitIds?.size ?? 0] },
+        updateTriggers: {
+          getFillColor: [
+            colorMap.size,
+            alpha,
+            visibility.corpora,
+            selectedUnitIds?.size ?? 0,
+          ],
+        },
       });
     })
     .filter((l): l is ScatterplotLayer => l !== null);
@@ -271,7 +331,7 @@ export function buildDepthScatterLayers(
  */
 export function buildHighlightLayer(
   positions: [number, number, number][],
-  id = 'search-highlight',
+  id = "search-highlight",
   radiusMinPixels = HIGHLIGHT_RADIUS_PX,
   fillAlpha = 175,
 ): Layer | null {
@@ -281,15 +341,15 @@ export function buildHighlightLayer(
   const fillColors = new Uint8Array(count * 4);
   const lineColors = new Uint8Array(count * 4);
   for (let i = 0; i < count; i++) {
-    posArr[i * 3]     = positions[i][0];
+    posArr[i * 3] = positions[i][0];
     posArr[i * 3 + 1] = positions[i][1];
     posArr[i * 3 + 2] = positions[i][2];
     // Dark fill with a gold outline keeps selected points visible on dense scatter.
-    fillColors[i * 4]     = 0;
+    fillColors[i * 4] = 0;
     fillColors[i * 4 + 1] = 0;
     fillColors[i * 4 + 2] = 0;
     fillColors[i * 4 + 3] = fillAlpha;
-    lineColors[i * 4]     = 201;
+    lineColors[i * 4] = 201;
     lineColors[i * 4 + 1] = 169;
     lineColors[i * 4 + 2] = 110;
     lineColors[i * 4 + 3] = 255;
@@ -305,12 +365,12 @@ export function buildHighlightLayer(
       },
     },
     getRadius: 4.5,
-    radiusUnits: 'pixels',
+    radiusUnits: "pixels",
     radiusMinPixels,
     billboard: true,
     pickable: false,
     stroked: true,
-    lineWidthUnits: 'pixels',
+    lineWidthUnits: "pixels",
     lineWidthMinPixels: 1,
     parameters: { depthTest: false },
   });
@@ -321,18 +381,20 @@ export function buildHighlightLayer(
  * For passage search: hub = the queried passage.
  * For semantic/keyword: hub = the top result.
  */
-export function buildConstellationLayer(positions: [number, number, number][]): Layer | null {
+export function buildConstellationLayer(
+  positions: [number, number, number][],
+): Layer | null {
   if (positions.length < 2) return null;
   const [hub, ...spokes] = positions;
-  const lines = spokes.map(pos => ({ from: hub, to: pos }));
+  const lines = spokes.map((pos) => ({ from: hub, to: pos }));
   return new LineLayer({
-    id: 'search-constellation',
+    id: "search-constellation",
     data: lines,
     getSourcePosition: (d: { from: [number, number, number] }) => d.from,
     getTargetPosition: (d: { to: [number, number, number] }) => d.to,
     getColor: [201, 169, 110, 255],
     getWidth: 1.5,
-    widthUnits: 'pixels',
+    widthUnits: "pixels",
     pickable: false,
     parameters: { depthTest: false },
   });
@@ -407,18 +469,18 @@ function mapColorKey(colorMap: CorpusColorMap): string {
   return [...colorMap.entries()]
     .sort(([a], [b]) => a - b)
     .map(([id, [r, g, b]]) => `${id}:${r},${g},${b}`)
-    .join('|');
+    .join("|");
 }
 
 function mapLabelKey(labelMap: CorpusLabelMap): string {
   return [...labelMap.entries()]
     .sort(([a], [b]) => a - b)
     .map(([id, label]) => `${id}:${label}`)
-    .join('|');
+    .join("|");
 }
 
 function hiddenCorporaKey(hiddenCorpora: Set<number>): string {
-  return [...hiddenCorpora].sort((a, b) => a - b).join(',');
+  return [...hiddenCorpora].sort((a, b) => a - b).join(",");
 }
 
 function boundsKey(data: StandardRunData): string {
@@ -427,25 +489,25 @@ function boundsKey(data: StandardRunData): string {
 }
 
 function pointLayersKey(layers: VisiblePointLayer[]): string {
-  return layers.map(layer => {
-    const last = Math.max(0, layer.count - 1);
-    return [
-      layer.id,
-      layer.count,
-      layer.positions[0] ?? 0,
-      layer.positions[1] ?? 0,
-      layer.positions[last * 3] ?? 0,
-      layer.positions[last * 3 + 1] ?? 0,
-    ].join(':');
-  }).join('|');
+  return layers
+    .map((layer) => {
+      const last = Math.max(0, layer.count - 1);
+      return [
+        layer.id,
+        layer.count,
+        layer.positions[0] ?? 0,
+        layer.positions[1] ?? 0,
+        layer.positions[last * 3] ?? 0,
+        layer.positions[last * 3 + 1] ?? 0,
+      ].join(":");
+    })
+    .join("|");
 }
 
 function dataCachePrefix(data: StandardRunData): string {
-  return [
-    data.manifest.run_id,
-    data.manifest.method,
-    boundsKey(data),
-  ].join('|');
+  return [data.manifest.run_id, data.manifest.method, boundsKey(data)].join(
+    "|",
+  );
 }
 
 function hiddenCorpusSet(visibility: MapVisibility): Set<number> {
@@ -456,11 +518,14 @@ function hiddenCorpusSet(visibility: MapVisibility): Set<number> {
   );
 }
 
-function visiblePointLayers(data: StandardRunData, visibility: MapVisibility): VisiblePointLayer[] {
-  if (visibility.scatterMode === 'height') {
+function visiblePointLayers(
+  data: StandardRunData,
+  visibility: MapVisibility,
+): VisiblePointLayer[] {
+  if (visibility.scatterMode === "height") {
     return data.manifest.heights
-      .filter(h => visibility.scatter[h] !== false)
-      .map(h => {
+      .filter((h) => visibility.scatter[h] !== false)
+      .map((h) => {
         const layer = data.layers.get(h) as HeightLayerData | undefined;
         return layer
           ? {
@@ -478,8 +543,8 @@ function visiblePointLayers(data: StandardRunData, visibility: MapVisibility): V
   }
 
   return data.manifest.depths
-    .filter(d => visibility.scatterDepth[d] !== false)
-    .map(d => {
+    .filter((d) => visibility.scatterDepth[d] !== false)
+    .map((d) => {
       const layer = data.depthLayers.get(d) as DepthLayerData | undefined;
       return layer
         ? {
@@ -501,7 +566,11 @@ function visibleLayerPoints(
   hiddenCorpora: Set<number>,
   includePoint: ((unitId: number, corpusId: number) => boolean) | null = null,
 ) {
-  const points: { unitId: number; corpusId: number; position: [number, number] }[] = [];
+  const points: {
+    unitId: number;
+    corpusId: number;
+    position: [number, number];
+  }[] = [];
   for (let i = 0; i < layer.count; i++) {
     const corpusId = layer.corpusIds[i];
     if (hiddenCorpora.has(corpusId)) continue;
@@ -516,9 +585,18 @@ function visibleLayerPoints(
   return points;
 }
 
-function boundsBox(data: StandardRunData, padFraction = 0.04): [number, number, number, number] {
-  const padX = Math.max((data.bounds.maxX - data.bounds.minX) * padFraction, 0.01);
-  const padY = Math.max((data.bounds.maxY - data.bounds.minY) * padFraction, 0.01);
+function boundsBox(
+  data: StandardRunData,
+  padFraction = 0.04,
+): [number, number, number, number] {
+  const padX = Math.max(
+    (data.bounds.maxX - data.bounds.minX) * padFraction,
+    0.01,
+  );
+  const padY = Math.max(
+    (data.bounds.maxY - data.bounds.minY) * padFraction,
+    0.01,
+  );
   return [
     data.bounds.minX - padX,
     data.bounds.minY - padY,
@@ -539,7 +617,9 @@ function kdeBoundsBox(data: StandardRunData): [number, number, number, number] {
   ];
 }
 
-function buildVoronoiPointFilter(data: StandardRunData): (unitId: number, corpusId: number) => boolean {
+function buildVoronoiPointFilter(
+  data: StandardRunData,
+): (unitId: number, corpusId: number) => boolean {
   const leafLayer = data.layers.get(0);
   if (!leafLayer) return () => true;
 
@@ -556,7 +636,8 @@ function buildVoronoiPointFilter(data: StandardRunData): (unitId: number, corpus
     }
   }
 
-  return (unitId, corpusId) => !leafUnitIds.has(unitId) || !corpusHasNonLeaf.has(corpusId);
+  return (unitId, corpusId) =>
+    !leafUnitIds.has(unitId) || !corpusHasNonLeaf.has(corpusId);
 }
 
 export function buildVoronoiLayers(
@@ -568,44 +649,58 @@ export function buildVoronoiLayers(
   const bbox = boundsBox(data);
   const layers = visiblePointLayers(data, visibility);
   const cacheKey = [
-    'voronoi-v2',
+    "voronoi-v2",
     dataCachePrefix(data),
     visibility.scatterMode,
     pointLayersKey(layers),
     hiddenCorporaKey(hiddenCorpora),
     mapColorKey(colorMap),
-  ].join('|');
+  ].join("|");
   const cached = getCached(voronoiDataCache, cacheKey);
   if (cached) return cached.map(voronoiDatumToLayer);
 
   const includeVoronoiPoint = buildVoronoiPointFilter(data);
-  const layerData = setCached(voronoiDataCache, cacheKey, layers.map((layer, layerIndex) => {
-    const points = visibleLayerPoints(layer, hiddenCorpora, includeVoronoiPoint);
-    if (points.length < 2) return null;
-    const delaunay = Delaunay.from(points, p => p.position[0], p => p.position[1]);
-    const voronoi = delaunay.voronoi(bbox);
-    const levelAlpha = Math.max(18, 52 - layerIndex * 7);
-    const lineAlpha = Math.max(70, 150 - layerIndex * 18);
-    const cellData: CellDatum[] = [];
+  const layerData = setCached(
+    voronoiDataCache,
+    cacheKey,
+    layers
+      .map((layer, layerIndex) => {
+        const points = visibleLayerPoints(
+          layer,
+          hiddenCorpora,
+          includeVoronoiPoint,
+        );
+        if (points.length < 2) return null;
+        const delaunay = Delaunay.from(
+          points,
+          (p) => p.position[0],
+          (p) => p.position[1],
+        );
+        const voronoi = delaunay.voronoi(bbox);
+        const levelAlpha = Math.max(18, 52 - layerIndex * 7);
+        const lineAlpha = Math.max(70, 150 - layerIndex * 18);
+        const cellData: CellDatum[] = [];
 
-    for (let i = 0; i < points.length; i++) {
-      const poly = voronoi.cellPolygon(i);
-      if (!poly || poly.length < 4) continue;
-      const [r, g, b] = colorMap.get(points[i].corpusId) ?? [126, 126, 126];
-      cellData.push({
-        polygon: poly.slice(0, -1).map(([x, y]) => [x, y]),
-        color: [r, g, b, levelAlpha],
-        lineColor: [r, g, b, lineAlpha],
-      });
-    }
+        for (let i = 0; i < points.length; i++) {
+          const poly = voronoi.cellPolygon(i);
+          if (!poly || poly.length < 4) continue;
+          const [r, g, b] = colorMap.get(points[i].corpusId) ?? [126, 126, 126];
+          cellData.push({
+            polygon: poly.slice(0, -1).map(([x, y]) => [x, y]),
+            color: [r, g, b, levelAlpha],
+            lineColor: [r, g, b, lineAlpha],
+          });
+        }
 
-    if (cellData.length === 0) return null;
-    return {
-      id: `voronoi-${visibility.scatterMode}-${layer.id}`,
-      cellData,
-      lineWidth: layerIndex === 0 ? 1.2 : 0.7,
-    };
-  }).filter((datum): datum is VoronoiLayerDatum => datum !== null));
+        if (cellData.length === 0) return null;
+        return {
+          id: `voronoi-${visibility.scatterMode}-${layer.id}`,
+          cellData,
+          lineWidth: layerIndex === 0 ? 1.2 : 0.7,
+        };
+      })
+      .filter((datum): datum is VoronoiLayerDatum => datum !== null),
+  );
 
   return layerData.map(voronoiDatumToLayer);
 }
@@ -619,7 +714,7 @@ function voronoiDatumToLayer(datum: VoronoiLayerDatum): SolidPolygonLayer {
     getLineColor: (d: CellDatum) => d.lineColor,
     stroked: true,
     filled: true,
-    lineWidthUnits: 'pixels',
+    lineWidthUnits: "pixels",
     getLineWidth: datum.lineWidth,
     pickable: false,
     parameters: { depthTest: false },
@@ -632,30 +727,40 @@ function kdeGroups(
   breakdown: KdeBreakdown,
   colorMap: CorpusColorMap,
 ) {
-  const groups = new Map<string, { color: [number, number, number]; corpusId: number | null; points: [number, number][] }>();
-  const kdeHiddenCorpora = breakdown === 'corpus' ? new Set<number>() : hiddenCorpora;
+  const groups = new Map<
+    string,
+    {
+      color: [number, number, number];
+      corpusId: number | null;
+      points: [number, number][];
+    }
+  >();
+  const kdeHiddenCorpora =
+    breakdown === "corpus" ? new Set<number>() : hiddenCorpora;
   for (const layer of layers) {
     const points = visibleLayerPoints(layer, kdeHiddenCorpora);
     for (const point of points) {
-      const key = breakdown === 'corpus' ? `corpus-${point.corpusId}` : 'overall';
+      const key =
+        breakdown === "corpus" ? `corpus-${point.corpusId}` : "overall";
       const fallbackColor: [number, number, number] =
-        breakdown === 'overall' ? [118, 166, 160] : [126, 126, 126];
-      const color = breakdown === 'corpus'
-        ? colorMap.get(point.corpusId) ?? fallbackColor
-        : fallbackColor;
+        breakdown === "overall" ? [118, 166, 160] : [126, 126, 126];
+      const color =
+        breakdown === "corpus"
+          ? (colorMap.get(point.corpusId) ?? fallbackColor)
+          : fallbackColor;
       const existing = groups.get(key);
       if (existing) {
         existing.points.push(point.position);
       } else {
         groups.set(key, {
           color,
-          corpusId: breakdown === 'corpus' ? point.corpusId : null,
+          corpusId: breakdown === "corpus" ? point.corpusId : null,
           points: [point.position],
         });
       }
     }
   }
-  return [...groups.values()].filter(group => group.points.length > 1);
+  return [...groups.values()].filter((group) => group.points.length > 1);
 }
 
 export function buildKdeCloudLayers(
@@ -678,82 +783,115 @@ export function buildKdeCloudLayers(
   const bandwidthSq = bandwidth * bandwidth;
   const radiusSq = bandwidthSq * 9;
   const cacheKey = [
-    'kde-v2',
+    "kde-v2",
     dataCachePrefix(data),
     visibility.scatterMode,
     breakdown,
     pointLayersKey(layers),
-    breakdown === 'corpus' ? 'all-corpora' : hiddenCorporaKey(hiddenCorpora),
+    breakdown === "corpus" ? "all-corpora" : hiddenCorporaKey(hiddenCorpora),
     mapColorKey(colorMap),
-  ].join('|');
+  ].join("|");
   const cached = getCached(kdeDataCache, cacheKey);
-  const layerData = cached ?? setCached(kdeDataCache, cacheKey, kdeGroups(layers, hiddenCorpora, breakdown, colorMap).map((group, groupIndex) => {
-    const fieldSize = grid + 1;
-    const densities = new Float32Array(fieldSize * fieldSize);
-    let maxDensity = 0;
+  const layerData =
+    cached ??
+    setCached(
+      kdeDataCache,
+      cacheKey,
+      kdeGroups(layers, hiddenCorpora, breakdown, colorMap)
+        .map((group, groupIndex) => {
+          const fieldSize = grid + 1;
+          const densities = new Float32Array(fieldSize * fieldSize);
+          let maxDensity = 0;
 
-    for (let gy = 0; gy <= grid; gy++) {
-      const y = minY + gy * cellH;
-      for (let gx = 0; gx <= grid; gx++) {
-        const x = minX + gx * cellW;
-        let density = 0;
-        for (const [px, py] of group.points) {
-          const dx = x - px;
-          const dy = y - py;
-          const distSq = dx * dx + dy * dy;
-          if (distSq <= radiusSq) density += Math.exp(-distSq / (2 * bandwidthSq));
-        }
-        densities[gy * fieldSize + gx] = density;
-        if (density > maxDensity) maxDensity = density;
-      }
-    }
-
-    if (maxDensity <= 0) return null;
-    const segments: KdeSegmentDatum[] = [];
-    const thresholds = [0.18, 0.32, 0.48, 0.66].map(t => t * maxDensity);
-    const [r, g, b] = group.color;
-
-    for (const threshold of thresholds) {
-      const intensity = threshold / maxDensity;
-      const color: [number, number, number, number] = [r, g, b, Math.round(96 + intensity * 130)];
-      const lineWidth = 0.7 + intensity * 2;
-      for (let gy = 0; gy < grid; gy++) {
-        for (let gx = 0; gx < grid; gx++) {
-          const x0 = minX + gx * cellW;
-          const y0 = minY + gy * cellH;
-          const x1 = x0 + cellW;
-          const y1 = y0 + cellH;
-          const p0: [number, number] = [x0, y0];
-          const p1: [number, number] = [x1, y0];
-          const p2: [number, number] = [x1, y1];
-          const p3: [number, number] = [x0, y1];
-          const v0 = densities[gy * fieldSize + gx];
-          const v1 = densities[gy * fieldSize + gx + 1];
-          const v2 = densities[(gy + 1) * fieldSize + gx + 1];
-          const v3 = densities[(gy + 1) * fieldSize + gx];
-          const crossings = contourCellIntersections(
-            threshold,
-            [[p0, v0], [p1, v1], [p2, v2], [p3, v3]],
-          );
-          if (crossings.length === 2) {
-            segments.push({ from: crossings[0], to: crossings[1], color, width: lineWidth });
-          } else if (crossings.length === 4) {
-            segments.push({ from: crossings[0], to: crossings[1], color, width: lineWidth });
-            segments.push({ from: crossings[2], to: crossings[3], color, width: lineWidth });
+          for (let gy = 0; gy <= grid; gy++) {
+            const y = minY + gy * cellH;
+            for (let gx = 0; gx <= grid; gx++) {
+              const x = minX + gx * cellW;
+              let density = 0;
+              for (const [px, py] of group.points) {
+                const dx = x - px;
+                const dy = y - py;
+                const distSq = dx * dx + dy * dy;
+                if (distSq <= radiusSq)
+                  density += Math.exp(-distSq / (2 * bandwidthSq));
+              }
+              densities[gy * fieldSize + gx] = density;
+              if (density > maxDensity) maxDensity = density;
+            }
           }
-        }
-      }
-    }
 
-    if (segments.length === 0) return null;
-    return {
-      id: `kde-contours-${breakdown}-${groupIndex}`,
-      corpusId: group.corpusId,
-      segments,
-    };
-  }).filter((datum): datum is KdeLayerDatum => datum !== null));
+          if (maxDensity <= 0) return null;
+          const segments: KdeSegmentDatum[] = [];
+          const thresholds = [0.18, 0.32, 0.48, 0.66].map(
+            (t) => t * maxDensity,
+          );
+          const [r, g, b] = group.color;
 
-  const visibleCorpusIds = breakdown === 'corpus' ? new Set<number>() : null;
+          for (const threshold of thresholds) {
+            const intensity = threshold / maxDensity;
+            const color: [number, number, number, number] = [
+              r,
+              g,
+              b,
+              Math.round(96 + intensity * 130),
+            ];
+            const lineWidth = 0.7 + intensity * 2;
+            for (let gy = 0; gy < grid; gy++) {
+              for (let gx = 0; gx < grid; gx++) {
+                const x0 = minX + gx * cellW;
+                const y0 = minY + gy * cellH;
+                const x1 = x0 + cellW;
+                const y1 = y0 + cellH;
+                const p0: [number, number] = [x0, y0];
+                const p1: [number, number] = [x1, y0];
+                const p2: [number, number] = [x1, y1];
+                const p3: [number, number] = [x0, y1];
+                const v0 = densities[gy * fieldSize + gx];
+                const v1 = densities[gy * fieldSize + gx + 1];
+                const v2 = densities[(gy + 1) * fieldSize + gx + 1];
+                const v3 = densities[(gy + 1) * fieldSize + gx];
+                const crossings = contourCellIntersections(threshold, [
+                  [p0, v0],
+                  [p1, v1],
+                  [p2, v2],
+                  [p3, v3],
+                ]);
+                if (crossings.length === 2) {
+                  segments.push({
+                    from: crossings[0],
+                    to: crossings[1],
+                    color,
+                    width: lineWidth,
+                  });
+                } else if (crossings.length === 4) {
+                  segments.push({
+                    from: crossings[0],
+                    to: crossings[1],
+                    color,
+                    width: lineWidth,
+                  });
+                  segments.push({
+                    from: crossings[2],
+                    to: crossings[3],
+                    color,
+                    width: lineWidth,
+                  });
+                }
+              }
+            }
+          }
+
+          if (segments.length === 0) return null;
+          return {
+            id: `kde-contours-${breakdown}-${groupIndex}`,
+            corpusId: group.corpusId,
+            segments,
+          };
+        })
+        .filter((datum): datum is KdeLayerDatum => datum !== null),
+    );
+
+  const visibleCorpusIds = breakdown === "corpus" ? new Set<number>() : null;
   if (visibleCorpusIds) {
     for (const layer of layers) {
       for (let i = 0; i < layer.count; i++) {
@@ -764,8 +902,12 @@ export function buildKdeCloudLayers(
   }
 
   return layerData
-    .filter(datum => !visibleCorpusIds || (datum.corpusId != null && visibleCorpusIds.has(datum.corpusId)))
-    .map(datum => {
+    .filter(
+      (datum) =>
+        !visibleCorpusIds ||
+        (datum.corpusId != null && visibleCorpusIds.has(datum.corpusId)),
+    )
+    .map((datum) => {
       return new LineLayer({
         id: datum.id,
         data: datum.segments,
@@ -773,7 +915,7 @@ export function buildKdeCloudLayers(
         getTargetPosition: (d: KdeSegmentDatum) => d.to,
         getColor: (d: KdeSegmentDatum) => d.color,
         getWidth: (d: KdeSegmentDatum) => d.width,
-        widthUnits: 'pixels',
+        widthUnits: "pixels",
         pickable: false,
         parameters: { depthTest: false },
       });
@@ -811,79 +953,101 @@ export function buildLabelLayers(
 ): Layer[] {
   const hiddenCorpora = hiddenCorpusSet(visibility);
   const selectedDepths = [...new Set(depths)]
-    .filter(depth => depth >= 0 && depth <= data.manifest.max_depth)
+    .filter((depth) => depth >= 0 && depth <= data.manifest.max_depth)
     .sort((a, b) => a - b);
   const cacheKey = [
-    'labels-v1',
+    "labels-v1",
     dataCachePrefix(data),
-    includeCorpusLabels ? 'corpus' : 'units',
-    selectedDepths.join(','),
+    includeCorpusLabels ? "corpus" : "units",
+    selectedDepths.join(","),
     hiddenCorporaKey(hiddenCorpora),
     mapColorKey(colorMap),
     mapLabelKey(corpusLabelMap),
-  ].join('|');
+  ].join("|");
   const cached = getCached(labelDataCache, cacheKey);
-  const labels = cached ?? setCached(labelDataCache, cacheKey, (() => {
-    const nextLabels: LabelDatum[] = [];
-    if (includeCorpusLabels) {
-      const corpusLayer = data.depthLayers.get(0);
-      if (corpusLayer) {
-        const corpusCentroids = new Map<number, { x: number; y: number; z: number; count: number }>();
-        for (let i = 0; i < corpusLayer.count; i++) {
-          const corpusId = corpusLayer.corpusIds[i];
-          if (hiddenCorpora.has(corpusId)) continue;
-          const current = corpusCentroids.get(corpusId) ?? { x: 0, y: 0, z: 0, count: 0 };
-          current.x += corpusLayer.positions[i * 3];
-          current.y += corpusLayer.positions[i * 3 + 1];
-          current.z += corpusLayer.positions[i * 3 + 2];
-          current.count += 1;
-          corpusCentroids.set(corpusId, current);
+  const labels =
+    cached ??
+    setCached(
+      labelDataCache,
+      cacheKey,
+      (() => {
+        const nextLabels: LabelDatum[] = [];
+        if (includeCorpusLabels) {
+          const corpusLayer = data.depthLayers.get(0);
+          if (corpusLayer) {
+            const corpusCentroids = new Map<
+              number,
+              { x: number; y: number; z: number; count: number }
+            >();
+            for (let i = 0; i < corpusLayer.count; i++) {
+              const corpusId = corpusLayer.corpusIds[i];
+              if (hiddenCorpora.has(corpusId)) continue;
+              const current = corpusCentroids.get(corpusId) ?? {
+                x: 0,
+                y: 0,
+                z: 0,
+                count: 0,
+              };
+              current.x += corpusLayer.positions[i * 3];
+              current.y += corpusLayer.positions[i * 3 + 1];
+              current.z += corpusLayer.positions[i * 3 + 2];
+              current.count += 1;
+              corpusCentroids.set(corpusId, current);
+            }
+
+            for (const [corpusId, centroid] of corpusCentroids) {
+              const text = corpusLabelMap.get(corpusId);
+              if (!text) continue;
+              const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
+              nextLabels.push({
+                position: [
+                  centroid.x / centroid.count,
+                  centroid.y / centroid.count,
+                  centroid.z / centroid.count,
+                ],
+                text,
+                color: [r, g, b, 245],
+              });
+            }
+          }
         }
 
-        for (const [corpusId, centroid] of corpusCentroids) {
-          const text = corpusLabelMap.get(corpusId);
-          if (!text) continue;
-          const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
-          nextLabels.push({
-            position: [centroid.x / centroid.count, centroid.y / centroid.count, centroid.z / centroid.count],
-            text,
-            color: [r, g, b, 245],
-          });
+        for (const depth of selectedDepths) {
+          const layer = data.depthLayers.get(depth);
+          if (!layer) continue;
+          for (let i = 0; i < layer.count; i++) {
+            const corpusId = layer.corpusIds[i];
+            if (hiddenCorpora.has(corpusId)) continue;
+            const text = data.unitLabels[String(layer.unitIds[i])];
+            if (!text) continue;
+            const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
+            nextLabels.push({
+              position: [
+                layer.positions[i * 3],
+                layer.positions[i * 3 + 1],
+                layer.positions[i * 3 + 2],
+              ],
+              text,
+              color: [r, g, b, depth === 0 ? 245 : depth === 1 ? 225 : 195],
+            });
+          }
         }
-      }
-    }
-
-    for (const depth of selectedDepths) {
-      const layer = data.depthLayers.get(depth);
-      if (!layer) continue;
-      for (let i = 0; i < layer.count; i++) {
-        const corpusId = layer.corpusIds[i];
-        if (hiddenCorpora.has(corpusId)) continue;
-        const text = data.unitLabels[String(layer.unitIds[i])];
-        if (!text) continue;
-        const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
-        nextLabels.push({
-          position: [layer.positions[i * 3], layer.positions[i * 3 + 1], layer.positions[i * 3 + 2]],
-          text,
-          color: [r, g, b, depth === 0 ? 245 : depth === 1 ? 225 : 195],
-        });
-      }
-    }
-    return nextLabels;
-  })());
+        return nextLabels;
+      })(),
+    );
 
   if (labels.length === 0) return [];
   return [
     new TextLayer({
-      id: `depth-centroid-labels-${includeCorpusLabels ? 'corpus' : 'units'}-${selectedDepths.join('-')}`,
+      id: `depth-centroid-labels-${includeCorpusLabels ? "corpus" : "units"}-${selectedDepths.join("-")}`,
       data: labels,
       getPosition: (d: LabelDatum) => d.position,
       getText: (d: LabelDatum) => d.text,
       getColor: (d: LabelDatum) => d.color,
       getSize: 12,
       getAngle: 0,
-      getTextAnchor: 'middle',
-      getAlignmentBaseline: 'center',
+      getTextAnchor: "middle",
+      getAlignmentBaseline: "center",
       background: true,
       getBackgroundColor: [10, 10, 10, 180],
       backgroundPadding: [4, 2],
@@ -905,9 +1069,10 @@ export function buildAllLayers(
   overlays: MapOverlayOptions = DEFAULT_OVERLAY_OPTIONS,
   enablePlanarDerivedOverlays = true,
 ): Layer[] {
-  const scatterLayers = visibility.scatterMode === 'depth'
-    ? buildDepthScatterLayers(data, visibility, colorMap, selectedUnitIds)
-    : buildScatterLayers(data, visibility, colorMap, selectedUnitIds);
+  const scatterLayers =
+    visibility.scatterMode === "depth"
+      ? buildDepthScatterLayers(data, visibility, colorMap, selectedUnitIds)
+      : buildScatterLayers(data, visibility, colorMap, selectedUnitIds);
   return [
     ...(enablePlanarDerivedOverlays && overlays.kde
       ? buildKdeCloudLayers(data, visibility, colorMap, overlays.kdeBreakdown)
