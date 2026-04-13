@@ -146,7 +146,7 @@ export interface MapSearchPanelHandle {
 
 export interface MapSearchPanelProps {
   corpora: CorpusInfo[];
-  scatterMode: 'height' | 'depth';
+  scatterMode: 'height' | 'corpusVersion';
   /** Exact unit IDs currently visible on the map. */
   visibleUnitIds?: globalThis.Set<number> | null;
   /** Coarse search filters derived from the layer panel visibility. */
@@ -205,8 +205,8 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
       corpus_ids: visibleCorpusIds ?? undefined,
       height_min: scatterMode === 'height' ? visibleHeightMin ?? undefined : undefined,
       height_max: scatterMode === 'height' ? visibleHeightMax ?? undefined : undefined,
-      depth_min: scatterMode === 'depth' ? visibleDepthMin ?? undefined : undefined,
-      depth_max: scatterMode === 'depth' ? visibleDepthMax ?? undefined : undefined,
+      depth_min: scatterMode === 'corpusVersion' ? visibleDepthMin ?? undefined : undefined,
+      depth_max: scatterMode === 'corpusVersion' ? visibleDepthMax ?? undefined : undefined,
     };
   }
 

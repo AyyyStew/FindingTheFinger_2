@@ -3,7 +3,7 @@ import {
   fetchLatestRunId,
   fetchManifest,
   fetchHeightBin,
-  fetchDepthBin,
+  fetchCorpusVersionBin,
   fetchUnitLabels,
   computeBounds,
   type ProjectionMethod,
@@ -12,8 +12,8 @@ import {
   type PcaRunData,
   type HeightLayerData,
   type PcaHeightLayerData,
-  type DepthLayerData,
-  type PcaDepthLayerData,
+  type CorpusVersionLayerData,
+  type PcaCorpusVersionLayerData,
 } from '../utils/projectionLoader';
 
 export interface UseProjectionDataResult {
@@ -61,12 +61,12 @@ export function useProjectionData(method: ProjectionMethod): UseProjectionDataRe
           message: `Loading ${manifest.heights.length} point layers…`,
         }));
 
-        const [layerResults, depthLayerResults, unitLabels] = await Promise.all([
+        const [layerResults, corpusVersionLayerResults, unitLabels] = await Promise.all([
           Promise.all(
             manifest.heights.map(h => fetchHeightBin(runId, method, h, manifest)),
           ),
           Promise.all(
-            manifest.depths.map(d => fetchDepthBin(runId, method, d, manifest)),
+            manifest.corpus_version_ids.map(cvid => fetchCorpusVersionBin(runId, method, cvid, manifest)),
           ),
           fetchUnitLabels(runId, method),
         ]);
@@ -78,19 +78,23 @@ export function useProjectionData(method: ProjectionMethod): UseProjectionDataRe
           const layers = new Map(
             layerResults.map(l => [l.height, l as PcaHeightLayerData]),
           );
-          const depthLayers = new Map(
-            depthLayerResults.map(l => [(l as PcaDepthLayerData).depth, l as PcaDepthLayerData]),
+          const corpusVersionLayers = new Map(
+            corpusVersionLayerResults.map(
+              l => [(l as PcaCorpusVersionLayerData).corpusVersionId, l as PcaCorpusVersionLayerData],
+            ),
           );
-          result = { manifest, layers, depthLayers, unitLabels } as PcaRunData;
+          result = { manifest, layers, corpusVersionLayers, unitLabels } as PcaRunData;
         } else {
           const layers = new Map(
             layerResults.map(l => [l.height, l as HeightLayerData]),
           );
-          const depthLayers = new Map(
-            depthLayerResults.map(l => [(l as DepthLayerData).depth, l as DepthLayerData]),
+          const corpusVersionLayers = new Map(
+            corpusVersionLayerResults.map(
+              l => [(l as CorpusVersionLayerData).corpusVersionId, l as CorpusVersionLayerData],
+            ),
           );
           const bounds = computeBounds(layers);
-          result = { manifest, layers, depthLayers, unitLabels, bounds } as StandardRunData;
+          result = { manifest, layers, corpusVersionLayers, unitLabels, bounds } as StandardRunData;
         }
 
         _cache.set(method, result);

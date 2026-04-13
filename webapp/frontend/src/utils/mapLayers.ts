@@ -17,7 +17,7 @@ import type { Layer } from "@deck.gl/core";
 import type { CorpusInfo } from "../api/types";
 import { getTaxonomyColor } from "./taxonomyColors";
 import type {
-  DepthLayerData,
+  CorpusVersionLayerData,
   HeightLayerData,
   StandardRunData,
 } from "./projectionLoader";
@@ -27,12 +27,12 @@ import type {
 // Designed to extend: add 'cloud', 'voronoi', 'labels' keys without breaking callers.
 
 export interface MapVisibility {
-  /** Whether scatter points are grouped by height-from-leaf or depth-from-root. */
-  scatterMode: "height" | "depth";
+  /** Whether scatter points are grouped by height-from-leaf or by corpus version. */
+  scatterMode: "height" | "corpusVersion";
   /** height → visible. Leaves (h=0) on by default. */
   scatter: Record<number, boolean>;
-  /** depth → visible. All depths on by default. */
-  scatterDepth: Record<number, boolean>;
+  /** corpus_version_id → visible. All versions on by default. */
+  scatterCorpusVersion: Record<number, boolean>;
   /** corpus_id → visible. Absent key means visible. Empty object = all visible. */
   corpora: Record<number, boolean>;
   /** corpus_version_id → visible. Absent key means visible. Empty object = all visible. */
@@ -63,16 +63,16 @@ export const DEFAULT_OVERLAY_OPTIONS: MapOverlayOptions = {
 
 export function defaultVisibility(
   heights: number[],
-  depths: number[],
+  corpusVersionIds: number[],
 ): MapVisibility {
   const scatter: Record<number, boolean> = {};
   for (const h of heights) scatter[h] = h === 0; // leaves on by default
-  const scatterDepth: Record<number, boolean> = {};
-  for (const d of depths) scatterDepth[d] = true; // all depths on by default
+  const scatterCorpusVersion: Record<number, boolean> = {};
+  for (const cvid of corpusVersionIds) scatterCorpusVersion[cvid] = true;
   return {
-    scatterMode: "depth",
+    scatterMode: "corpusVersion",
     scatter,
-    scatterDepth,
+    scatterCorpusVersion,
     corpora: {},
     corpusVersions: {},
   };
@@ -276,14 +276,12 @@ export function buildScatterLayers(
     });
 }
 
-// ── Depth scatter layer builder ───────────────────────────────────────────────
+// ── Corpus-version scatter layer builder ─────────────────────────────────────
 
 /**
- * One ScatterplotLayer per visible depth level.
- * Shallower depths (closer to root) get larger radii — they represent
- * more-aggregated units, mirroring the height-based size logic.
+ * One ScatterplotLayer per visible corpus version.
  */
-export function buildDepthScatterLayers(
+export function buildCorpusVersionScatterLayers(
   data: StandardRunData,
   visibility: MapVisibility,
   colorMap: CorpusColorMap,
@@ -300,17 +298,13 @@ export function buildDepthScatterLayers(
       .map(([k]) => Number(k)),
   );
 
-  const maxDepth = data.manifest.max_depth;
-  return data.manifest.depths
-    .filter((d) => visibility.scatterDepth[d] !== false)
-    .map((d) => {
-      const layer = data.depthLayers.get(d) as DepthLayerData;
+  return data.manifest.corpus_version_ids
+    .filter((cvid) => visibility.scatterCorpusVersion[cvid] !== false)
+    .map((cvid) => {
+      const layer = data.corpusVersionLayers.get(cvid) as CorpusVersionLayerData;
       if (!layer) return null;
-      // Deepest depth = leaves: small + semi-transparent.
-      // Shallower depths = parents: larger, more opaque.
-      const distFromLeaf = maxDepth - d;
-      const alpha = distFromLeaf === 0 ? 180 : 230;
-      const radius = distFromLeaf === 0 ? 3 : 4 + distFromLeaf * 3;
+      const alpha = 200;
+      const radius = 4;
       const { fillColors, lineColors } = buildPointStyleArrays(
         layer,
         colorMap,
@@ -322,7 +316,7 @@ export function buildDepthScatterLayers(
       );
 
       return new ScatterplotLayer({
-        id: `scatter-d${d}`,
+        id: `scatter-cv${cvid}`,
         data: {
           length: layer.count,
           attributes: {
@@ -586,15 +580,15 @@ function visiblePointLayers(
       .filter((layer): layer is VisiblePointLayer => layer !== null);
   }
 
-  return data.manifest.depths
-    .filter((d) => visibility.scatterDepth[d] !== false)
-    .map((d) => {
-      const layer = data.depthLayers.get(d) as DepthLayerData | undefined;
+  return data.manifest.corpus_version_ids
+    .filter((cvid) => visibility.scatterCorpusVersion[cvid] !== false)
+    .map((cvid) => {
+      const layer = data.corpusVersionLayers.get(cvid) as CorpusVersionLayerData | undefined;
       return layer
         ? {
-            id: `d${d}`,
-            level: d,
-            label: `depth ${d}`,
+            id: `cv${cvid}`,
+            level: cvid,
+            label: `corpus version ${cvid}`,
             count: layer.count,
             unitIds: layer.unitIds,
             positions: layer.positions,
@@ -1018,18 +1012,18 @@ export function buildLabelLayers(
   colorMap: CorpusColorMap,
   corpusLabelMap: CorpusLabelMap,
   includeCorpusLabels: boolean,
-  depths: number[],
+  corpusVersionIds: number[],
 ): Layer[] {
   const hiddenCorpora = hiddenCorpusSet(visibility);
   const hiddenVersions = hiddenVersionSet(visibility);
-  const selectedDepths = [...new Set(depths)]
-    .filter((depth) => depth >= 0 && depth <= data.manifest.max_depth)
+  const selectedCorpusVersionIds = [...new Set(corpusVersionIds)]
+    .filter((cvid) => data.manifest.corpus_version_ids.includes(cvid))
     .sort((a, b) => a - b);
   const cacheKey = [
     "labels-v1",
     dataCachePrefix(data),
     includeCorpusLabels ? "corpus" : "units",
-    selectedDepths.join(","),
+    selectedCorpusVersionIds.join(","),
     hiddenCorporaKey(hiddenCorpora),
     hiddenVersionsKey(hiddenVersions),
     mapColorKey(colorMap),
@@ -1044,12 +1038,11 @@ export function buildLabelLayers(
       (() => {
         const nextLabels: LabelDatum[] = [];
         if (includeCorpusLabels) {
-          const corpusLayer = data.depthLayers.get(0);
-          if (corpusLayer) {
-            const corpusCentroids = new Map<
-              number,
-              { x: number; y: number; z: number; count: number }
-            >();
+          const corpusCentroids = new Map<
+            number,
+            { x: number; y: number; z: number; count: number }
+          >();
+          for (const [, corpusLayer] of data.corpusVersionLayers) {
             for (let i = 0; i < corpusLayer.count; i++) {
               const corpusId = corpusLayer.corpusIds[i];
               const corpusVersionId = corpusLayer.corpusVersionIds[i];
@@ -1067,26 +1060,26 @@ export function buildLabelLayers(
               current.count += 1;
               corpusCentroids.set(corpusId, current);
             }
+          }
 
-            for (const [corpusId, centroid] of corpusCentroids) {
-              const text = corpusLabelMap.get(corpusId);
-              if (!text) continue;
-              const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
-              nextLabels.push({
-                position: [
-                  centroid.x / centroid.count,
-                  centroid.y / centroid.count,
-                  centroid.z / centroid.count,
-                ],
-                text,
-                color: [r, g, b, 245],
-              });
-            }
+          for (const [corpusId, centroid] of corpusCentroids) {
+            const text = corpusLabelMap.get(corpusId);
+            if (!text) continue;
+            const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
+            nextLabels.push({
+              position: [
+                centroid.x / centroid.count,
+                centroid.y / centroid.count,
+                centroid.z / centroid.count,
+              ],
+              text,
+              color: [r, g, b, 245],
+            });
           }
         }
 
-        for (const depth of selectedDepths) {
-          const layer = data.depthLayers.get(depth);
+        for (const [idx, cvid] of selectedCorpusVersionIds.entries()) {
+          const layer = data.corpusVersionLayers.get(cvid);
           if (!layer) continue;
           for (let i = 0; i < layer.count; i++) {
             const corpusId = layer.corpusIds[i];
@@ -1103,7 +1096,7 @@ export function buildLabelLayers(
                 layer.positions[i * 3 + 2],
               ],
               text,
-              color: [r, g, b, depth === 0 ? 245 : depth === 1 ? 225 : 195],
+              color: [r, g, b, idx === 0 ? 245 : idx === 1 ? 225 : 195],
             });
           }
         }
@@ -1114,7 +1107,7 @@ export function buildLabelLayers(
   if (labels.length === 0) return [];
   return [
     new TextLayer({
-      id: `depth-centroid-labels-${includeCorpusLabels ? "corpus" : "units"}-${selectedDepths.join("-")}`,
+      id: `corpus-version-labels-${includeCorpusLabels ? "corpus" : "units"}-${selectedCorpusVersionIds.join("-")}`,
       data: labels,
       getPosition: (d: LabelDatum) => d.position,
       getText: (d: LabelDatum) => d.text,
@@ -1145,8 +1138,8 @@ export function buildAllLayers(
   enablePlanarDerivedOverlays = true,
 ): Layer[] {
   const scatterLayers =
-    visibility.scatterMode === "depth"
-      ? buildDepthScatterLayers(data, visibility, colorMap, selectedUnitIds)
+    visibility.scatterMode === "corpusVersion"
+      ? buildCorpusVersionScatterLayers(data, visibility, colorMap, selectedUnitIds)
       : buildScatterLayers(data, visibility, colorMap, selectedUnitIds);
   return [
     ...(enablePlanarDerivedOverlays && overlays.kde

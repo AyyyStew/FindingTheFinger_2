@@ -28,6 +28,15 @@ Binary format (columnar, little-endian):
         [corpus_ids:    N × int32]
         [corpus_version_ids: N × int32]
 
+    corpus_version_<id>.bin:
+        [N: uint32]
+        [unit_ids:      N × int32]
+        [component_0:   N × float32]
+        …
+        [component_K-1: N × float32]
+        [corpus_ids:    N × int32]
+        [corpus_version_ids: N × int32]
+
 Standard methods (UMAP, PHATE, Isomap) use K=2.
 PCA uses K = number of retained principal components (stored in manifest).
 
@@ -328,8 +337,8 @@ def write_method_output(
         <base_output_dir>/<method_name>/<run_id>/
 
     Writes both height_N.bin (grouped by height from leaf) and
-    depth_N.bin (grouped by depth from root) so the frontend can
-    toggle either grouping. Also writes the per-method latest pointer:
+    corpus_version_<id>.bin (grouped by corpus_version_id) so the
+    frontend can toggle either grouping. Also writes the per-method latest pointer:
         <base_output_dir>/<method_name>/latest.json
     """
     method_dir = base_output_dir / method_name / run_id
@@ -377,23 +386,23 @@ def write_method_output(
         point_counts[str(h)] = len(uids)
         print(f"  height_{h}.bin  {len(uids):,} points")
 
-    # ── Depth bins ────────────────────────────────────────────────────────────
-    # Each depth_D.bin contains all units at depth D from the corpus root.
+    # ── Corpus-version bins ───────────────────────────────────────────────────
+    # Each corpus_version_<id>.bin contains all units in one corpus version.
     # Format:
     # [N][unit_ids][comp_0]...[comp_K-1][corpus_ids][corpus_version_ids]
-    # No ancestor columns — depth bins are for visibility/rendering only.
+    # No ancestor columns — these bins are for visibility/rendering only.
 
-    by_depth: dict[int, list[int]] = defaultdict(list)
+    by_corpus_version: dict[int, list[int]] = defaultdict(list)
     for uid in positions:
-        d = depth_of.get(uid)
-        if d is not None:
-            by_depth[d].append(uid)
+        cvid = corpus_version_id_of.get(uid)
+        if cvid is not None:
+            by_corpus_version[cvid].append(uid)
 
-    depth_counts: dict[str, int] = {}
-    max_depth = max(by_depth.keys()) if by_depth else 0
+    corpus_version_counts: dict[str, int] = {}
+    max_depth = max(depth_of.values()) if depth_of else 0
 
-    for d in sorted(by_depth.keys()):
-        uids = sorted(by_depth[d])
+    for cvid in sorted(by_corpus_version.keys()):
+        uids = sorted(by_corpus_version[cvid])
         ids  = np.array(uids, dtype=np.int32)
         cids = np.array([corpus_id_of.get(u, 0) for u in uids], dtype=np.int32)
         cvids = np.array([corpus_version_id_of.get(u, 0) for u in uids], dtype=np.int32)
@@ -405,10 +414,10 @@ def write_method_output(
         cols.append((cids, "int32"))
         cols.append((cvids, "int32"))
 
-        bin_path = method_dir / f"depth_{d}.bin"
+        bin_path = method_dir / f"corpus_version_{cvid}.bin"
         _write_columnar_bin(bin_path, cols)
-        depth_counts[str(d)] = len(uids)
-        print(f"  depth_{d}.bin   {len(uids):,} points")
+        corpus_version_counts[str(cvid)] = len(uids)
+        print(f"  corpus_version_{cvid}.bin   {len(uids):,} points")
 
     # ── Labels + manifest ─────────────────────────────────────────────────────
 
@@ -422,14 +431,14 @@ def write_method_output(
         "created_at":       datetime.now(timezone.utc).isoformat(),
         "method":           method_name,
         "embedding_method": METHOD_LABEL,
-        "bin_schema_version": 2,
+        "bin_schema_version": 3,
         "has_corpus_version_ids": True,
         "max_height":       max_height,
         "heights":          sorted(by_height.keys()),
         "point_counts":     point_counts,
         "max_depth":        max_depth,
-        "depths":           sorted(by_depth.keys()),
-        "depth_counts":     depth_counts,
+        "corpus_version_ids": sorted(by_corpus_version.keys()),
+        "corpus_version_counts": corpus_version_counts,
         "n_components":     n_components,
         **manifest_extra,
     }

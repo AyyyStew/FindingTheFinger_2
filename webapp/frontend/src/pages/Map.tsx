@@ -113,11 +113,11 @@ export function Map() {
     return normalizeVisibilityForData(visibility, resolvedData);
   }, [visibility, resolvedData]);
 
-  const labelDepths = useMemo(() => {
+  const labelCorpusVersionIds = useMemo(() => {
     if (!resolvedData) return [];
-    return [...resolvedData.depthLayers.keys()]
-      .filter(depth => {
-        const layer = resolvedData.depthLayers.get(depth);
+    return [...resolvedData.corpusVersionLayers.keys()]
+      .filter(corpusVersionId => {
+        const layer = resolvedData.corpusVersionLayers.get(corpusVersionId);
         if (!layer) return false;
         for (let i = 0; i < layer.count; i++) {
           if (resolvedData.unitLabels[String(layer.unitIds[i])]) return true;
@@ -200,7 +200,7 @@ export function Map() {
   const [compareError, setCompareError] = useState<string | null>(null);
   const [compareHoverUnitId, setCompareHoverUnitId] = useState<number | null>(null);
 
-  /** Map from unitId → [x, y] built once from all height+depth layers. */
+  /** Map from unitId → [x, y] built once from all height+corpus-version layers. */
   const unitPositionMap = useMemo(
     () => resolvedData ? buildUnitPositionMap(resolvedData) : new globalThis.Map<number, [number, number, number]>(),
     [resolvedData],
@@ -235,7 +235,7 @@ export function Map() {
     return getVisibleDepthRange(resolvedData, resolvedVisibility);
   }, [resolvedData, resolvedVisibility]);
 
-  const searchScatterMode = resolvedVisibility?.scatterMode ?? 'depth';
+  const searchScatterMode = resolvedVisibility?.scatterMode ?? 'corpusVersion';
 
   /**
    * Positions for the constellation. Index 0 = hub (anchor for passage mode,
@@ -603,7 +603,7 @@ export function Map() {
                 >
                   Labels
                 </button>
-                <div className={styles.overlayDepthGroup} aria-label="Label depths">
+                <div className={styles.overlayDepthGroup} aria-label="Label corpus versions">
                   <button
                     type="button"
                     className={`${styles.overlayBtn} ${overlays.labelCorpus ? styles.overlayBtnActive : ''}`}
@@ -612,15 +612,15 @@ export function Map() {
                   >
                     corpus
                   </button>
-                  {labelDepths.map(depth => (
+                  {labelCorpusVersionIds.map(corpusVersionId => (
                       <button
-                        key={depth}
+                        key={corpusVersionId}
                         type="button"
-                        className={`${styles.overlayBtn} ${overlays.labelDepths.includes(depth) ? styles.overlayBtnActive : ''}`}
-                        onClick={() => toggleLabelDepth(depth)}
+                        className={`${styles.overlayBtn} ${overlays.labelDepths.includes(corpusVersionId) ? styles.overlayBtnActive : ''}`}
+                        onClick={() => toggleLabelDepth(corpusVersionId)}
                         disabled={!overlays.labels}
                       >
-                        d{depth}
+                        v{corpusVersionId}
                       </button>
                     ))}
                 </div>

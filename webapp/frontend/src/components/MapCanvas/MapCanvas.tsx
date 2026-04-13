@@ -21,9 +21,9 @@ import styles from "./MapCanvas.module.css";
 
 export interface HoverInfo {
   unitId: number;
-  /** Height of the hovered layer (-1 when in depth mode). */
+  /** Height of the hovered layer (-1 when in corpus-version mode). */
   height: number;
-  /** Depth of the hovered layer (-1 when in height mode). */
+  /** Depth field is reserved for search integration (-1 when unknown). */
   depth: number;
   corpusId: number;
   screenX: number;
@@ -196,12 +196,12 @@ export function MapCanvas({
       } as typeof layer);
     }
 
-    const depthLayers = new Map<
+    const corpusVersionLayers = new Map<
       number,
-      typeof data.depthLayers extends Map<number, infer T> ? T : never
+      typeof data.corpusVersionLayers extends Map<number, infer T> ? T : never
     >();
-    for (const [depth, layer] of data.depthLayers) {
-      depthLayers.set(depth, {
+    for (const [corpusVersionId, layer] of data.corpusVersionLayers) {
+      corpusVersionLayers.set(corpusVersionId, {
         ...layer,
         positions: flattenPositionsTo2D(layer.positions),
       } as typeof layer);
@@ -210,7 +210,7 @@ export function MapCanvas({
     return {
       ...data,
       layers,
-      depthLayers,
+      corpusVersionLayers,
       bounds: {
         ...data.bounds,
         minZ: 0,
@@ -519,7 +519,7 @@ export function MapCanvas({
       if (!info.picked || info.index < 0) return null;
       const layerId = info.layer?.id ?? "";
       const heightMatch = layerId.match(/^scatter-h(\d+)$/);
-      const depthMatch = layerId.match(/^scatter-d(\d+)$/);
+      const corpusVersionMatch = layerId.match(/^scatter-cv(\d+)$/);
       if (heightMatch) {
         const height = parseInt(heightMatch[1], 10);
         const layer = data.layers.get(height);
@@ -532,14 +532,14 @@ export function MapCanvas({
           screenX: info.x,
           screenY: info.y,
         };
-      } else if (depthMatch) {
-        const depth = parseInt(depthMatch[1], 10);
-        const layer = data.depthLayers.get(depth);
+      } else if (corpusVersionMatch) {
+        const corpusVersionId = parseInt(corpusVersionMatch[1], 10);
+        const layer = data.corpusVersionLayers.get(corpusVersionId);
         if (!layer) return null;
         return {
           unitId: layer.unitIds[info.index],
           height: -1,
-          depth,
+          depth: -1,
           corpusId: layer.corpusIds[info.index],
           screenX: info.x,
           screenY: info.y,

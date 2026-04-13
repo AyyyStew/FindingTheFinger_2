@@ -37,23 +37,17 @@ function depthDisplayName(
   return [...names].slice(0, 3).join(" / ");
 }
 
-/**
- * Label for a depth-indexed row. Each corpus has its own max height,
- * so depth d corresponds to height (corpusMaxHeight - d) per corpus.
- * Collects the level names that land at that height across corpora.
- */
-function depthRowLabel(depth: number, corpora: CorpusInfo[]): string {
-  const names = new Set<string>();
+function corpusVersionDisplayName(
+  corpusVersionId: number,
+  corpora: CorpusInfo[],
+): string {
   for (const corpus of corpora) {
-    if (corpus.levels.length === 0) continue;
-    const corpusMaxHeight = Math.max(...corpus.levels.map((l) => l.height));
-    const targetHeight = corpusMaxHeight - depth;
-    if (targetHeight < 0) continue;
-    const level = corpus.levels.find((l) => l.height === targetHeight);
-    if (level) names.add(level.name);
+    const version = corpus.versions.find((v) => v.id === corpusVersionId);
+    if (!version) continue;
+    const versionName = version.translation_name ?? version.language ?? `version ${corpusVersionId}`;
+    return `${corpus.name} · ${versionName}`;
   }
-  if (names.size === 0) return `d${depth}`;
-  return [...names].slice(0, 4).join(" / ");
+  return `version ${corpusVersionId}`;
 }
 
 export function LayerPanel({
@@ -90,7 +84,7 @@ export function LayerPanel({
 
   const mode = visibility.scatterMode;
 
-  const setMode = (next: "depth" | "height") =>
+  const setMode = (next: "corpusVersion" | "height") =>
     onChange({ ...visibility, scatterMode: next });
 
   // Height-mode toggles
@@ -110,26 +104,28 @@ export function LayerPanel({
     onChange({ ...visibility, scatter });
   };
 
-  // Depth-mode toggles
-  const toggleScatterDepth = (depth: number) =>
+  // Corpus-version-mode toggles
+  const toggleScatterCorpusVersion = (corpusVersionId: number) =>
     onChange({
       ...visibility,
-      scatterDepth: {
-        ...visibility.scatterDepth,
-        [depth]: !visibility.scatterDepth[depth],
+      scatterCorpusVersion: {
+        ...visibility.scatterCorpusVersion,
+        [corpusVersionId]: !visibility.scatterCorpusVersion[corpusVersionId],
       },
     });
 
-  const allDepthOn = manifest.depths.every(
-    (d) => visibility.scatterDepth[d] !== false,
+  const allCorpusVersionOn = manifest.corpus_version_ids.every(
+    (cvid) => visibility.scatterCorpusVersion[cvid] !== false,
   );
-  const allDepthOff = manifest.depths.every((d) => !visibility.scatterDepth[d]);
+  const allCorpusVersionOff = manifest.corpus_version_ids.every(
+    (cvid) => !visibility.scatterCorpusVersion[cvid],
+  );
 
-  const toggleAllDepth = () => {
-    const next = allDepthOn ? false : true;
-    const scatterDepth: Record<number, boolean> = {};
-    for (const d of manifest.depths) scatterDepth[d] = next;
-    onChange({ ...visibility, scatterDepth });
+  const toggleAllCorpusVersion = () => {
+    const next = allCorpusVersionOn ? false : true;
+    const scatterCorpusVersion: Record<number, boolean> = {};
+    for (const cvid of manifest.corpus_version_ids) scatterCorpusVersion[cvid] = next;
+    onChange({ ...visibility, scatterCorpusVersion });
   };
 
   // ── Two-level tradition grouping ──────────────────────────────────────────
@@ -237,11 +233,11 @@ export function LayerPanel({
           <span className={styles.sectionLabel}>Points</span>
           <button
             className={styles.bulkToggle}
-            onClick={mode === "depth" ? toggleAllDepth : toggleAllScatter}
+            onClick={mode === "corpusVersion" ? toggleAllCorpusVersion : toggleAllScatter}
           >
-            {(mode === "depth" ? allDepthOn : allScatterOn)
+            {(mode === "corpusVersion" ? allCorpusVersionOn : allScatterOn)
               ? "hide all"
-              : (mode === "depth" ? allDepthOff : allScatterOff)
+              : (mode === "corpusVersion" ? allCorpusVersionOff : allScatterOff)
                 ? "show all"
                 : "toggle all"}
           </button>
@@ -250,10 +246,10 @@ export function LayerPanel({
         {/* Mode toggle */}
         <div className={styles.modeToggle}>
           <button
-            className={`${styles.modeBtn} ${mode === "depth" ? styles.modeBtnActive : ""}`}
-            onClick={() => setMode("depth")}
+            className={`${styles.modeBtn} ${mode === "corpusVersion" ? styles.modeBtnActive : ""}`}
+            onClick={() => setMode("corpusVersion")}
           >
-            by depth
+            by corpus version
           </button>
           <button
             className={`${styles.modeBtn} ${mode === "height" ? styles.modeBtnActive : ""}`}
@@ -291,19 +287,20 @@ export function LayerPanel({
           </ul>
         ) : (
           <ul className={styles.list}>
-            {[...manifest.depths].map((d) => {
-              const visible = visibility.scatterDepth[d] !== false;
-              const count = manifest.depth_counts[String(d)] ?? 0;
+            {[...manifest.corpus_version_ids].map((cvid) => {
+              const visible = visibility.scatterCorpusVersion[cvid] !== false;
+              const count = manifest.corpus_version_counts[String(cvid)] ?? 0;
+              const label = corpusVersionDisplayName(cvid, corpora);
               return (
-                <li key={d} className={styles.item}>
+                <li key={cvid} className={styles.item}>
                   <label className={styles.row}>
                     <input
                       type="checkbox"
                       className={styles.check}
                       checked={visible}
-                      onChange={() => toggleScatterDepth(d)}
+                      onChange={() => toggleScatterCorpusVersion(cvid)}
                     />
-                    <span className={styles.heightLabel} title={depthRowLabel(d, corpora)}>{depthRowLabel(d, corpora)}</span>
+                    <span className={styles.heightLabel} title={label}>{label}</span>
                     <span className={styles.count}>
                       {count.toLocaleString()}
                     </span>

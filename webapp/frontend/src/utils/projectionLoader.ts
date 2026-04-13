@@ -15,7 +15,7 @@
  *     [comp_0:f32×N] … [comp_{K-1}:f32×N]
  *     [corpusIds:i32×N] [corpusVersionIds:i32×N]
  *
- *   depth_D.bin (all depths, no ancestor columns):
+ *   corpus_version_<id>.bin (all units in one corpus version):
  *     [N:uint32] [unitIds:i32×N]
  *     [comp_0:f32×N] … [comp_{K-1}:f32×N]
  *     [corpusIds:i32×N] [corpusVersionIds:i32×N]
@@ -23,9 +23,8 @@
  * Standard methods (UMAP, PHATE, Isomap): K>=2; frontend uses xyz when present.
  * PCA: K=n_components (all retained PCs). Frontend picks any three to display.
  *
- * Depth bins group units by distance-from-root so cross-corpus siblings
- * at the same depth (e.g. Bible books and Raga top-level units) can be
- * toggled together, unlike height bins which group by distance-from-leaf.
+ * Corpus-version bins group units by corpus_version_id so map visibility can
+ * toggle specific versions independently while keeping height bins unchanged.
  */
 
 const BASE_URL = '/static/dimreduction';
@@ -51,7 +50,7 @@ interface BaseManifest {
   label:            string | null;
   method:           ProjectionMethod;
   embedding_method: string;
-  /** Hard-cutover bin schema version with corpusVersionIds columns. */
+  /** Hard-cutover bin schema version for corpus_version bins. */
   bin_schema_version: number;
   has_corpus_version_ids: boolean;
   max_height:       number;
@@ -59,10 +58,9 @@ interface BaseManifest {
   point_counts:     Record<string, number>;
   /** Number of component columns stored per unit. 2 for standard methods; K for PCA. */
   n_components:     number;
-  /** Depth = distance from corpus root. depth_D.bin groups units at this depth. */
   max_depth:        number;
-  depths:           number[];
-  depth_counts:     Record<string, number>;
+  corpus_version_ids: number[];
+  corpus_version_counts: Record<string, number>;
 }
 
 export interface UmapManifest extends BaseManifest {
@@ -160,12 +158,12 @@ export interface PcaParentLayerData {
 export type PcaHeightLayerData = PcaLeafLayerData | PcaParentLayerData;
 
 /**
- * Depth layer — units grouped by depth (distance from corpus root).
- * Same format for all depths; no ancestor columns.
+ * Corpus-version layer — units grouped by corpus_version_id.
+ * Same format for all corpus versions; no ancestor columns.
  * Standard methods: positions interleaved [x0,y0,z0,x1,y1,z1,…].
  */
-export interface DepthLayerData {
-  depth: number;
+export interface CorpusVersionLayerData {
+  corpusVersionId: number;
   count: number;
   unitIds: Int32Array;
   positions: Float32Array;
@@ -173,9 +171,9 @@ export interface DepthLayerData {
   corpusVersionIds: Int32Array;
 }
 
-/** PCA depth layer — raw components, pick any two for positions. */
-export interface PcaDepthLayerData {
-  depth: number;
+/** PCA corpus-version layer — raw components, pick any three for positions. */
+export interface PcaCorpusVersionLayerData {
+  corpusVersionId: number;
   count: number;
   unitIds: Int32Array;
   components: Float32Array[];
@@ -188,7 +186,7 @@ export interface PcaDepthLayerData {
 export interface StandardRunData {
   manifest: UmapManifest | PhateManifest | IsomapManifest;
   layers: Map<number, HeightLayerData>;
-  depthLayers: Map<number, DepthLayerData>;
+  corpusVersionLayers: Map<number, CorpusVersionLayerData>;
   unitLabels: Record<string, string>;
   bounds: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
 }
@@ -196,7 +194,7 @@ export interface StandardRunData {
 export interface PcaRunData {
   manifest: PcaManifest;
   layers: Map<number, PcaHeightLayerData>;
-  depthLayers: Map<number, PcaDepthLayerData>;
+  corpusVersionLayers: Map<number, PcaCorpusVersionLayerData>;
   unitLabels: Record<string, string>;
 }
 
@@ -212,7 +210,7 @@ export function isPcaRunData(d: ProjectionRunData): d is PcaRunData {
  * Build an interleaved positions Float32Array from three PC indices (0-indexed).
  * Used by Map.tsx when the user changes the X/Y/Z PC axis selectors.
  */
-type PcaProjectionLayerData = PcaHeightLayerData | PcaDepthLayerData;
+type PcaProjectionLayerData = PcaHeightLayerData | PcaCorpusVersionLayerData;
 
 function buildInterleavedPositions3(
   xArr: Float32Array,
@@ -281,22 +279,22 @@ export function resolvePcaData(
     }
   }
 
-  const depthLayers = new Map<number, DepthLayerData>();
-  for (const [depth, pcaDepthLayer] of raw.depthLayers) {
-    depthLayers.set(depth, {
-      depth,
-      count: pcaDepthLayer.count,
-      unitIds: pcaDepthLayer.unitIds,
-      positions: buildPcaPositions(pcaDepthLayer, xPc, yPc, zPc),
-      corpusIds: pcaDepthLayer.corpusIds,
-      corpusVersionIds: pcaDepthLayer.corpusVersionIds,
+  const corpusVersionLayers = new Map<number, CorpusVersionLayerData>();
+  for (const [corpusVersionId, pcaCorpusVersionLayer] of raw.corpusVersionLayers) {
+    corpusVersionLayers.set(corpusVersionId, {
+      corpusVersionId,
+      count: pcaCorpusVersionLayer.count,
+      unitIds: pcaCorpusVersionLayer.unitIds,
+      positions: buildPcaPositions(pcaCorpusVersionLayer, xPc, yPc, zPc),
+      corpusIds: pcaCorpusVersionLayer.corpusIds,
+      corpusVersionIds: pcaCorpusVersionLayer.corpusVersionIds,
     });
   }
 
   return {
     manifest: raw.manifest as unknown as UmapManifest,  // shape-compatible for LayerPanel
     layers,
-    depthLayers,
+    corpusVersionLayers,
     unitLabels: raw.unitLabels,
     bounds: computeBounds(layers),
   };
@@ -324,11 +322,11 @@ export async function fetchManifest(
   if (!res.ok) throw new Error(`Failed to load ${method} manifest (${res.status})`);
   const manifest = await res.json() as ProjectionManifest;
   if (
-    manifest.bin_schema_version < 2 ||
+    manifest.bin_schema_version < 3 ||
     manifest.has_corpus_version_ids !== true
   ) {
     throw new Error(
-      `Unsupported ${method} projection schema for run ${runId}. Regenerate dimreduction artifacts with corpus_version_ids.`,
+      `Unsupported ${method} projection schema for run ${runId}. Regenerate dimreduction artifacts with schema v3 corpus_version bins.`,
     );
   }
   return manifest;
@@ -361,19 +359,19 @@ export async function fetchHeightBin(
   return parseHeightBin(buffer, height, manifest);
 }
 
-export async function fetchDepthBin(
+export async function fetchCorpusVersionBin(
   runId: string,
   method: ProjectionMethod,
-  depth: number,
+  corpusVersionId: number,
   manifest: ProjectionManifest,
-): Promise<DepthLayerData | PcaDepthLayerData> {
-  let res = await fetch(`${BASE_URL}/${method}/${runId}/depth_${depth}.bin`);
+): Promise<CorpusVersionLayerData | PcaCorpusVersionLayerData> {
+  let res = await fetch(`${BASE_URL}/${method}/${runId}/corpus_version_${corpusVersionId}.bin`);
   if (!res.ok) {
-    res = await fetch(`${BASE_URL}/${runId}/${method}/depth_${depth}.bin`);
+    res = await fetch(`${BASE_URL}/${runId}/${method}/corpus_version_${corpusVersionId}.bin`);
   }
-  if (!res.ok) throw new Error(`Failed to load ${method}/depth_${depth}.bin (${res.status})`);
+  if (!res.ok) throw new Error(`Failed to load ${method}/corpus_version_${corpusVersionId}.bin (${res.status})`);
   const buffer = await res.arrayBuffer();
-  return parseDepthBin(buffer, depth, manifest);
+  return parseCorpusVersionBin(buffer, corpusVersionId, manifest);
 }
 
 // ── Binary parser ─────────────────────────────────────────────────────────────
@@ -474,15 +472,15 @@ function parseHeightBin(
 }
 
 /**
- * Parse a depth_D.bin buffer.
+ * Parse a corpus_version_<id>.bin buffer.
  * Format: [N][unitIds][comp_0]…[comp_K-1][corpusIds][corpusVersionIds]
  * No ancestor columns — simpler than height bins.
  */
-function parseDepthBin(
+function parseCorpusVersionBin(
   buffer: ArrayBuffer,
-  depth: number,
+  corpusVersionId: number,
   manifest: ProjectionManifest,
-): DepthLayerData | PcaDepthLayerData {
+): CorpusVersionLayerData | PcaCorpusVersionLayerData {
   const reader = createBinaryReader(buffer);
   const N = reader.readU32();
   const K = manifest.n_components;
@@ -496,13 +494,13 @@ function parseDepthBin(
 
   if (isPca) {
     return {
-      depth,
+      corpusVersionId,
       count: N,
       unitIds,
       components: compCols,
       corpusIds,
       corpusVersionIds,
-    } as PcaDepthLayerData;
+    } as PcaCorpusVersionLayerData;
   }
 
   const x = compCols[0];
@@ -510,13 +508,13 @@ function parseDepthBin(
   const z = compCols[2] ?? new Float32Array(N);
   const positions = buildInterleavedPositions3(x, y, z, N);
   return {
-    depth,
+    corpusVersionId,
     count: N,
     unitIds,
     positions,
     corpusIds,
     corpusVersionIds,
-  } as DepthLayerData;
+  } as CorpusVersionLayerData;
 }
 
 // ── Bounds ────────────────────────────────────────────────────────────────────

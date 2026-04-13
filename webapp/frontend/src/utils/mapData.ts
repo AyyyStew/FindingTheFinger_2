@@ -15,7 +15,7 @@ export function buildUnitPositionMap(data: StandardRunData): globalThis.Map<numb
       map.set(layer.unitIds[i], [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]]);
     }
   }
-  for (const [, layer] of data.depthLayers) {
+  for (const [, layer] of data.corpusVersionLayers) {
     const pos = layer.positions;
     for (let i = 0; i < layer.count; i++) {
       if (!map.has(layer.unitIds[i])) {
@@ -33,7 +33,7 @@ export function buildUnitCorpusMap(data: StandardRunData): globalThis.Map<number
       map.set(layer.unitIds[i], layer.corpusIds[i]);
     }
   }
-  for (const [, layer] of data.depthLayers) {
+  for (const [, layer] of data.corpusVersionLayers) {
     for (let i = 0; i < layer.count; i++) {
       if (!map.has(layer.unitIds[i])) {
         map.set(layer.unitIds[i], layer.corpusIds[i]);
@@ -47,7 +47,7 @@ export function normalizeVisibilityForData(
   current: MapVisibility | null,
   data: StandardRunData,
 ): MapVisibility {
-  const defaults = defaultVisibility(data.manifest.heights, data.manifest.depths);
+  const defaults = defaultVisibility(data.manifest.heights, data.manifest.corpus_version_ids);
   if (!current) return defaults;
 
   const scatter = { ...defaults.scatter };
@@ -55,15 +55,17 @@ export function normalizeVisibilityForData(
     if (current.scatter[h] != null) scatter[h] = current.scatter[h];
   }
 
-  const scatterDepth = { ...defaults.scatterDepth };
-  for (const d of data.manifest.depths) {
-    if (current.scatterDepth[d] != null) scatterDepth[d] = current.scatterDepth[d];
+  const scatterCorpusVersion = { ...defaults.scatterCorpusVersion };
+  for (const cvid of data.manifest.corpus_version_ids) {
+    if (current.scatterCorpusVersion[cvid] != null) {
+      scatterCorpusVersion[cvid] = current.scatterCorpusVersion[cvid];
+    }
   }
 
   return {
     scatterMode: current.scatterMode,
     scatter,
-    scatterDepth,
+    scatterCorpusVersion,
     corpora: current.corpora,
     corpusVersions: current.corpusVersions,
   };
@@ -98,8 +100,8 @@ export function buildVisibleUnitIds(
       }
     }
   } else {
-    for (const [d, layer] of data.depthLayers) {
-      if (visibility.scatterDepth[d] === false) continue;
+    for (const [cvid, layer] of data.corpusVersionLayers) {
+      if (visibility.scatterCorpusVersion[cvid] === false) continue;
       for (let i = 0; i < layer.count; i++) {
         if (
           !hiddenCorpora.has(layer.corpusIds[i]) &&
@@ -142,13 +144,9 @@ export function visibleDepthRange(
   data: StandardRunData,
   visibility: MapVisibility,
 ): NullableRange {
-  if (visibility.scatterMode !== 'depth') return { min: null, max: null };
-
-  const visibleDepths = data.manifest.depths.filter((d) => visibility.scatterDepth[d] !== false);
-  if (visibleDepths.length === 0) return { min: null, max: null };
-
+  if (visibility.scatterMode !== 'corpusVersion') return { min: null, max: null };
   return {
-    min: Math.min(...visibleDepths),
-    max: Math.max(...visibleDepths),
+    min: 0,
+    max: data.manifest.max_depth,
   };
 }
