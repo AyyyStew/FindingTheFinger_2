@@ -47,8 +47,6 @@ export interface MapOverlayOptions {
   labels: boolean;
   hidePoints: boolean;
   kdeBreakdown: KdeBreakdown;
-  labelCorpus: boolean;
-  labelDepths: number[];
 }
 
 export const DEFAULT_OVERLAY_OPTIONS: MapOverlayOptions = {
@@ -57,8 +55,6 @@ export const DEFAULT_OVERLAY_OPTIONS: MapOverlayOptions = {
   labels: false,
   hidePoints: false,
   kdeBreakdown: "overall",
-  labelCorpus: true,
-  labelDepths: [],
 };
 
 export function defaultVisibility(
@@ -1011,19 +1007,12 @@ export function buildLabelLayers(
   visibility: MapVisibility,
   colorMap: CorpusColorMap,
   corpusLabelMap: CorpusLabelMap,
-  includeCorpusLabels: boolean,
-  corpusVersionIds: number[],
 ): Layer[] {
   const hiddenCorpora = hiddenCorpusSet(visibility);
   const hiddenVersions = hiddenVersionSet(visibility);
-  const selectedCorpusVersionIds = [...new Set(corpusVersionIds)]
-    .filter((cvid) => data.manifest.corpus_version_ids.includes(cvid))
-    .sort((a, b) => a - b);
   const cacheKey = [
     "labels-v1",
     dataCachePrefix(data),
-    includeCorpusLabels ? "corpus" : "units",
-    selectedCorpusVersionIds.join(","),
     hiddenCorporaKey(hiddenCorpora),
     hiddenVersionsKey(hiddenVersions),
     mapColorKey(colorMap),
@@ -1037,68 +1026,43 @@ export function buildLabelLayers(
       cacheKey,
       (() => {
         const nextLabels: LabelDatum[] = [];
-        if (includeCorpusLabels) {
-          const corpusCentroids = new Map<
-            number,
-            { x: number; y: number; z: number; count: number }
-          >();
-          for (const [, corpusLayer] of data.corpusVersionLayers) {
-            for (let i = 0; i < corpusLayer.count; i++) {
-              const corpusId = corpusLayer.corpusIds[i];
-              const corpusVersionId = corpusLayer.corpusVersionIds[i];
-              if (hiddenCorpora.has(corpusId)) continue;
-              if (hiddenVersions.has(corpusVersionId)) continue;
-              const current = corpusCentroids.get(corpusId) ?? {
-                x: 0,
-                y: 0,
-                z: 0,
-                count: 0,
-              };
-              current.x += corpusLayer.positions[i * 3];
-              current.y += corpusLayer.positions[i * 3 + 1];
-              current.z += corpusLayer.positions[i * 3 + 2];
-              current.count += 1;
-              corpusCentroids.set(corpusId, current);
-            }
-          }
-
-          for (const [corpusId, centroid] of corpusCentroids) {
-            const text = corpusLabelMap.get(corpusId);
-            if (!text) continue;
-            const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
-            nextLabels.push({
-              position: [
-                centroid.x / centroid.count,
-                centroid.y / centroid.count,
-                centroid.z / centroid.count,
-              ],
-              text,
-              color: [r, g, b, 245],
-            });
+        const corpusCentroids = new Map<
+          number,
+          { x: number; y: number; z: number; count: number }
+        >();
+        for (const [, corpusLayer] of data.corpusVersionLayers) {
+          for (let i = 0; i < corpusLayer.count; i++) {
+            const corpusId = corpusLayer.corpusIds[i];
+            const corpusVersionId = corpusLayer.corpusVersionIds[i];
+            if (hiddenCorpora.has(corpusId)) continue;
+            if (hiddenVersions.has(corpusVersionId)) continue;
+            const current = corpusCentroids.get(corpusId) ?? {
+              x: 0,
+              y: 0,
+              z: 0,
+              count: 0,
+            };
+            current.x += corpusLayer.positions[i * 3];
+            current.y += corpusLayer.positions[i * 3 + 1];
+            current.z += corpusLayer.positions[i * 3 + 2];
+            current.count += 1;
+            corpusCentroids.set(corpusId, current);
           }
         }
 
-        for (const [idx, cvid] of selectedCorpusVersionIds.entries()) {
-          const layer = data.corpusVersionLayers.get(cvid);
-          if (!layer) continue;
-          for (let i = 0; i < layer.count; i++) {
-            const corpusId = layer.corpusIds[i];
-            const corpusVersionId = layer.corpusVersionIds[i];
-            if (hiddenCorpora.has(corpusId)) continue;
-            if (hiddenVersions.has(corpusVersionId)) continue;
-            const text = data.unitLabels[String(layer.unitIds[i])];
-            if (!text) continue;
-            const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
-            nextLabels.push({
-              position: [
-                layer.positions[i * 3],
-                layer.positions[i * 3 + 1],
-                layer.positions[i * 3 + 2],
-              ],
-              text,
-              color: [r, g, b, idx === 0 ? 245 : idx === 1 ? 225 : 195],
-            });
-          }
+        for (const [corpusId, centroid] of corpusCentroids) {
+          const text = corpusLabelMap.get(corpusId);
+          if (!text) continue;
+          const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];
+          nextLabels.push({
+            position: [
+              centroid.x / centroid.count,
+              centroid.y / centroid.count,
+              centroid.z / centroid.count,
+            ],
+            text,
+            color: [r, g, b, 245],
+          });
         }
         return nextLabels;
       })(),
@@ -1107,7 +1071,7 @@ export function buildLabelLayers(
   if (labels.length === 0) return [];
   return [
     new TextLayer({
-      id: `corpus-version-labels-${includeCorpusLabels ? "corpus" : "units"}-${selectedCorpusVersionIds.join("-")}`,
+      id: "corpus-labels",
       data: labels,
       getPosition: (d: LabelDatum) => d.position,
       getText: (d: LabelDatum) => d.text,
@@ -1155,8 +1119,6 @@ export function buildAllLayers(
           visibility,
           colorMap,
           corpusLabelMap,
-          overlays.labelCorpus,
-          overlays.labelDepths,
         )
       : []),
   ];

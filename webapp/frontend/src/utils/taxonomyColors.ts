@@ -22,7 +22,7 @@ const ROOT_COLORS: Array<{ keywords: string[]; hsl: HSL }> = [
   },
   {
     keywords: ["ancient", "historic", "egypt", "greek", "roman", "sumer"],
-    hsl: { h: 0, s: 0, l: 60 },
+    hsl: { h: 0, s: 44, l: 44 },
   },
   {
     keywords: ["new religious", "latter", "bahai"],

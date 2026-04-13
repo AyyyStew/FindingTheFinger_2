@@ -22,34 +22,6 @@ interface TraditionGroup {
   subGroups: SubGroup[];
 }
 
-function depthDisplayName(
-  height: number,
-  maxHeight: number,
-  corpora: CorpusInfo[],
-): string {
-  const depth = maxHeight - height;
-  const names = new Set<string>();
-  for (const corpus of corpora) {
-    const level = corpus.levels.find((l) => l.height === height);
-    if (level) names.add(level.name);
-  }
-  if (names.size === 0) return `d${depth}`;
-  return [...names].slice(0, 3).join(" / ");
-}
-
-function corpusVersionDisplayName(
-  corpusVersionId: number,
-  corpora: CorpusInfo[],
-): string {
-  for (const corpus of corpora) {
-    const version = corpus.versions.find((v) => v.id === corpusVersionId);
-    if (!version) continue;
-    const versionName = version.translation_name ?? version.language ?? `version ${corpusVersionId}`;
-    return `${corpus.name} · ${versionName}`;
-  }
-  return `version ${corpusVersionId}`;
-}
-
 export function LayerPanel({
   manifest,
   corpora,
@@ -79,54 +51,6 @@ export function LayerPanel({
     setExpandedTraditions(tIds);
     setExpandedSubGroups(sIds);
   }, [corpora]);
-
-  // ── Scatter mode + toggles ────────────────────────────────────────────────
-
-  const mode = visibility.scatterMode;
-
-  const setMode = (next: "corpusVersion" | "height") =>
-    onChange({ ...visibility, scatterMode: next });
-
-  // Height-mode toggles
-  const toggleScatter = (height: number) =>
-    onChange({
-      ...visibility,
-      scatter: { ...visibility.scatter, [height]: !visibility.scatter[height] },
-    });
-
-  const allScatterOn = manifest.heights.every((h) => visibility.scatter[h]);
-  const allScatterOff = manifest.heights.every((h) => !visibility.scatter[h]);
-
-  const toggleAllScatter = () => {
-    const next = allScatterOn ? false : true;
-    const scatter: Record<number, boolean> = {};
-    for (const h of manifest.heights) scatter[h] = next;
-    onChange({ ...visibility, scatter });
-  };
-
-  // Corpus-version-mode toggles
-  const toggleScatterCorpusVersion = (corpusVersionId: number) =>
-    onChange({
-      ...visibility,
-      scatterCorpusVersion: {
-        ...visibility.scatterCorpusVersion,
-        [corpusVersionId]: !visibility.scatterCorpusVersion[corpusVersionId],
-      },
-    });
-
-  const allCorpusVersionOn = manifest.corpus_version_ids.every(
-    (cvid) => visibility.scatterCorpusVersion[cvid] !== false,
-  );
-  const allCorpusVersionOff = manifest.corpus_version_ids.every(
-    (cvid) => !visibility.scatterCorpusVersion[cvid],
-  );
-
-  const toggleAllCorpusVersion = () => {
-    const next = allCorpusVersionOn ? false : true;
-    const scatterCorpusVersion: Record<number, boolean> = {};
-    for (const cvid of manifest.corpus_version_ids) scatterCorpusVersion[cvid] = next;
-    onChange({ ...visibility, scatterCorpusVersion });
-  };
 
   // ── Two-level tradition grouping ──────────────────────────────────────────
 
@@ -226,91 +150,6 @@ export function LayerPanel({
   return (
     <aside className={styles.panel}>
       <h2 className={styles.title}>Layers</h2>
-
-      {/* ── Points section ── */}
-      <section className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <span className={styles.sectionLabel}>Points</span>
-          <button
-            className={styles.bulkToggle}
-            onClick={mode === "corpusVersion" ? toggleAllCorpusVersion : toggleAllScatter}
-          >
-            {(mode === "corpusVersion" ? allCorpusVersionOn : allScatterOn)
-              ? "hide all"
-              : (mode === "corpusVersion" ? allCorpusVersionOff : allScatterOff)
-                ? "show all"
-                : "toggle all"}
-          </button>
-        </div>
-
-        {/* Mode toggle */}
-        <div className={styles.modeToggle}>
-          <button
-            className={`${styles.modeBtn} ${mode === "corpusVersion" ? styles.modeBtnActive : ""}`}
-            onClick={() => setMode("corpusVersion")}
-          >
-            by corpus version
-          </button>
-          <button
-            className={`${styles.modeBtn} ${mode === "height" ? styles.modeBtnActive : ""}`}
-            onClick={() => setMode("height")}
-          >
-            by height
-          </button>
-        </div>
-
-        {mode === "height" ? (
-          <ul className={styles.list}>
-            {[...manifest.heights].reverse().map((h) => {
-              const visible = visibility.scatter[h] ?? false;
-              const count = manifest.point_counts[String(h)] ?? 0;
-              const label = depthDisplayName(h, manifest.max_height, corpora);
-              return (
-                <li key={h} className={styles.item}>
-                  <label className={styles.row}>
-                    <input
-                      type="checkbox"
-                      className={styles.check}
-                      checked={visible}
-                      onChange={() => toggleScatter(h)}
-                    />
-                    <span className={styles.heightLabel} title={label}>
-                      {label}
-                    </span>
-                    <span className={styles.count}>
-                      {count.toLocaleString()}
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <ul className={styles.list}>
-            {[...manifest.corpus_version_ids].map((cvid) => {
-              const visible = visibility.scatterCorpusVersion[cvid] !== false;
-              const count = manifest.corpus_version_counts[String(cvid)] ?? 0;
-              const label = corpusVersionDisplayName(cvid, corpora);
-              return (
-                <li key={cvid} className={styles.item}>
-                  <label className={styles.row}>
-                    <input
-                      type="checkbox"
-                      className={styles.check}
-                      checked={visible}
-                      onChange={() => toggleScatterCorpusVersion(cvid)}
-                    />
-                    <span className={styles.heightLabel} title={label}>{label}</span>
-                    <span className={styles.count}>
-                      {count.toLocaleString()}
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
 
       {/* ── Traditions section ── */}
       {traditionGroups.length > 0 && (
