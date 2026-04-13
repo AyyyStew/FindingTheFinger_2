@@ -30,7 +30,7 @@ Standard methods (UMAP, PHATE, Isomap) use K=2.
 PCA uses K = number of retained principal components (stored in manifest).
 
 Per-method latest pointer:  static/dimreduction/<method>/latest.json
-Run data:                   static/dimreduction/<run_id>/<method>/
+Run data:                   static/dimreduction/<method>/<run_id>/
 """
 
 import json
@@ -304,14 +304,14 @@ def write_method_output(
 ) -> None:
     """
     Write binary + JSON output for one method under:
-        <base_output_dir>/<run_id>/<method_name>/
+        <base_output_dir>/<method_name>/<run_id>/
 
     Writes both height_N.bin (grouped by height from leaf) and
     depth_N.bin (grouped by depth from root) so the frontend can
     toggle either grouping. Also writes the per-method latest pointer:
         <base_output_dir>/<method_name>/latest.json
     """
-    method_dir = base_output_dir / run_id / method_name
+    method_dir = base_output_dir / method_name / run_id
     method_dir.mkdir(parents=True, exist_ok=True)
     print(f"\nWriting output to {method_dir}/")
 

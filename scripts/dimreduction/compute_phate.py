@@ -2,13 +2,14 @@
 scripts/dimreduction/compute_phate.py
 
 PHATE 3D projection. Fits on a balanced sample, transforms all points.
-Saves the fitted operator as encoder.pkl (supports phate_op.transform()).
+Can optionally save the fitted operator as encoder.pkl (supports phate_op.transform()).
 
 Requires: pip install phate
 
 Usage:
     python -m scripts.dimreduction.compute_phate
     python -m scripts.dimreduction.compute_phate --knn 5 --decay 40
+    python -m scripts.dimreduction.compute_phate --save-encoder
 """
 
 import argparse
@@ -38,6 +39,8 @@ def parse_args():
     p.add_argument("--decay",               type=int,   default=DEFAULT_DECAY)
     p.add_argument("--sample-per-division", type=int,   default=DEFAULT_SAMPLE_PER_DIV)
     p.add_argument("--no-sample",           action="store_true")
+    p.add_argument("--save-encoder",        action="store_true",
+                   help="Save fitted encoder.pkl (default: off)")
     p.add_argument("--output-dir",          default=DEFAULT_OUTPUT_DIR)
     return p.parse_args()
 
@@ -126,9 +129,12 @@ def main(run_id: str | None = None) -> None:
         n_components    = 3,
     )
 
-    encoder_path = output_dir / run_id / METHOD_NAME / "encoder.pkl"
-    joblib.dump(phate_op, encoder_path)
-    print(f"  encoder.pkl  saved")
+    if args.save_encoder:
+        encoder_path = output_dir / METHOD_NAME / run_id / "encoder.pkl"
+        joblib.dump(phate_op, encoder_path)
+        print(f"  encoder.pkl  saved")
+    else:
+        print("  encoder.pkl  skipped (use --save-encoder to enable)")
 
     print(f"\nDone. Run: {run_id}")
 

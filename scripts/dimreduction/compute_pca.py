@@ -41,6 +41,8 @@ def parse_args():
                    help="Retain PCs until cumulative explained variance >= this (default: 0.95)")
     p.add_argument("--max-components",      type=int,   default=DEFAULT_MAX_COMPONENTS,
                    help="Hard cap on number of PCs retained (default: 50)")
+    p.add_argument("--save-encoder",        action="store_true",
+                   help="Save fitted encoder.pkl (default: off)")
     p.add_argument("--output-dir",          default=DEFAULT_OUTPUT_DIR)
     return p.parse_args()
 
@@ -121,9 +123,12 @@ def main(run_id: str | None = None) -> None:
         n_components    = n_components,
     )
 
-    encoder_path = output_dir / run_id / METHOD_NAME / "encoder.pkl"
-    joblib.dump(pca, encoder_path)
-    print(f"  encoder.pkl  saved")
+    if args.save_encoder:
+        encoder_path = output_dir / METHOD_NAME / run_id / "encoder.pkl"
+        joblib.dump(pca, encoder_path)
+        print(f"  encoder.pkl  saved")
+    else:
+        print("  encoder.pkl  skipped (use --save-encoder to enable)")
 
     print(f"\nDone. Run: {run_id}")
 

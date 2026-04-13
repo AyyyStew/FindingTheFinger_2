@@ -2,7 +2,7 @@
 scripts/dimreduction/compute_isomap.py
 
 Isomap 3D projection. Fits on a balanced sample using sklearn's Isomap,
-transforms all points via kernel approximation. Saves encoder.pkl.
+transforms all points via kernel approximation. Can optionally save encoder.pkl.
 
 Isomap builds a kNN graph, so fitting is O(n_sample²) — the balanced
 sample keeps this tractable. Transform on new points uses the Nyström
@@ -11,6 +11,7 @@ kernel approximation built into sklearn.
 Usage:
     python -m scripts.dimreduction.compute_isomap
     python -m scripts.dimreduction.compute_isomap --n-neighbors 10
+    python -m scripts.dimreduction.compute_isomap --save-encoder
 """
 
 import argparse
@@ -50,6 +51,8 @@ def parse_args():
                    help="Batch size for iso.transform over all points to cap RAM usage")
     p.add_argument("--sample-per-division", type=int, default=DEFAULT_SAMPLE_PER_DIV)
     p.add_argument("--no-sample",           action="store_true")
+    p.add_argument("--save-encoder",        action="store_true",
+                   help="Save fitted encoder.pkl (default: off)")
     p.add_argument("--output-dir",          default=DEFAULT_OUTPUT_DIR)
     return p.parse_args()
 
@@ -172,9 +175,12 @@ def main(run_id: str | None = None) -> None:
         n_components    = 3,
     )
 
-    encoder_path = output_dir / run_id / METHOD_NAME / "encoder.pkl"
-    joblib.dump(iso, encoder_path)
-    print(f"  encoder.pkl  saved")
+    if args.save_encoder:
+        encoder_path = output_dir / METHOD_NAME / run_id / "encoder.pkl"
+        joblib.dump(iso, encoder_path)
+        print(f"  encoder.pkl  saved")
+    else:
+        print("  encoder.pkl  skipped (use --save-encoder to enable)")
 
     print(f"\nDone. Run: {run_id}")
 

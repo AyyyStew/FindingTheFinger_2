@@ -303,7 +303,12 @@ export async function fetchManifest(
   runId: string,
   method: ProjectionMethod,
 ): Promise<ProjectionManifest> {
-  const res = await fetch(`${BASE_URL}/${runId}/${method}/manifest.json`);
+  // New layout: /static/dimreduction/<method>/<run>/...
+  // Backward compatibility: /static/dimreduction/<run>/<method>/...
+  let res = await fetch(`${BASE_URL}/${method}/${runId}/manifest.json`);
+  if (!res.ok) {
+    res = await fetch(`${BASE_URL}/${runId}/${method}/manifest.json`);
+  }
   if (!res.ok) throw new Error(`Failed to load ${method} manifest (${res.status})`);
   return res.json() as Promise<ProjectionManifest>;
 }
@@ -312,7 +317,10 @@ export async function fetchUnitLabels(
   runId: string,
   method: ProjectionMethod,
 ): Promise<Record<string, string>> {
-  const res = await fetch(`${BASE_URL}/${runId}/${method}/unit_labels.json`);
+  let res = await fetch(`${BASE_URL}/${method}/${runId}/unit_labels.json`);
+  if (!res.ok) {
+    res = await fetch(`${BASE_URL}/${runId}/${method}/unit_labels.json`);
+  }
   if (!res.ok) throw new Error(`Failed to load ${method} unit_labels (${res.status})`);
   return res.json() as Promise<Record<string, string>>;
 }
@@ -323,7 +331,10 @@ export async function fetchHeightBin(
   height: number,
   manifest: ProjectionManifest,
 ): Promise<HeightLayerData | PcaHeightLayerData> {
-  const res = await fetch(`${BASE_URL}/${runId}/${method}/height_${height}.bin`);
+  let res = await fetch(`${BASE_URL}/${method}/${runId}/height_${height}.bin`);
+  if (!res.ok) {
+    res = await fetch(`${BASE_URL}/${runId}/${method}/height_${height}.bin`);
+  }
   if (!res.ok) throw new Error(`Failed to load ${method}/height_${height}.bin (${res.status})`);
   const buffer = await res.arrayBuffer();
   return parseHeightBin(buffer, height, manifest);
@@ -335,7 +346,10 @@ export async function fetchDepthBin(
   depth: number,
   manifest: ProjectionManifest,
 ): Promise<DepthLayerData | PcaDepthLayerData> {
-  const res = await fetch(`${BASE_URL}/${runId}/${method}/depth_${depth}.bin`);
+  let res = await fetch(`${BASE_URL}/${method}/${runId}/depth_${depth}.bin`);
+  if (!res.ok) {
+    res = await fetch(`${BASE_URL}/${runId}/${method}/depth_${depth}.bin`);
+  }
   if (!res.ok) throw new Error(`Failed to load ${method}/depth_${depth}.bin (${res.status})`);
   const buffer = await res.arrayBuffer();
   return parseDepthBin(buffer, depth, manifest);

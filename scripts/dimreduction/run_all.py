@@ -3,7 +3,7 @@ scripts/dimreduction/run_all.py
 
 Runner that executes all dimensionality reduction methods under a single
 shared run_id. Each method writes to:
-    static/dimreduction/<run_id>/<method>/
+    static/dimreduction/<method>/<run_id>/
 
 And updates its own latest pointer:
     static/dimreduction/<method>/latest.json
@@ -31,16 +31,20 @@ def parse_args():
                    help="Run only these methods (default: all)")
     p.add_argument("--skip",    nargs="+", choices=ALL_METHODS, default=None,
                    help="Skip these methods")
+    p.add_argument("--save-encoder", action="store_true",
+                   help="Pass --save-encoder to compute scripts (default: off)")
     p.add_argument("--output-dir", default="static/dimreduction")
     return p.parse_args()
 
 
-def _import_and_run(method: str, run_id: str, output_dir: str) -> None:
+def _import_and_run(method: str, run_id: str, output_dir: str, save_encoder: bool) -> None:
     """Import the compute_<method> module and call main(run_id)."""
     # Patch sys.argv so each module's parse_args() sees --output-dir.
     old_argv = sys.argv
     sys.argv = [f"scripts.dimreduction.compute_{method}",
                 "--output-dir", output_dir]
+    if save_encoder:
+        sys.argv.append("--save-encoder")
     try:
         if method == "umap":
             from scripts.dimreduction.compute_umap import main
@@ -77,7 +81,7 @@ def main() -> None:
         print(f"  {method.upper()}")
         print(f"{sep}")
         try:
-            _import_and_run(method, run_id, args.output_dir)
+            _import_and_run(method, run_id, args.output_dir, args.save_encoder)
             results[method] = "OK"
         except Exception:
             traceback.print_exc()

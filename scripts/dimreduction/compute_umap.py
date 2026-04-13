@@ -3,13 +3,14 @@ scripts/dimreduction/compute_umap.py
 
 UMAP 3D projection. Fits on a balanced sample, transforms all points,
 aggregates parent positions by mean, writes binary output.
-Also saves the fitted reducer as encoder.pkl for later transform().
+Can optionally save the fitted reducer as encoder.pkl for later transform().
 
 Usage:
     python -m scripts.dimreduction.compute_umap
     python -m scripts.dimreduction.compute_umap --run-id 2026-01-01_120000
     python -m scripts.dimreduction.compute_umap --n-neighbors 15 --min-dist 0.1
     python -m scripts.dimreduction.compute_umap --no-sample
+    python -m scripts.dimreduction.compute_umap --save-encoder
     python -m scripts.dimreduction.compute_umap --dry-run
 """
 
@@ -42,6 +43,8 @@ def parse_args():
     p.add_argument("--sample-per-division", type=int,   default=DEFAULT_SAMPLE_PER_DIV)
     p.add_argument("--no-sample",           action="store_true")
     p.add_argument("--dry-run",             action="store_true")
+    p.add_argument("--save-encoder",        action="store_true",
+                   help="Save fitted encoder.pkl (default: off)")
     p.add_argument("--output-dir",          default=DEFAULT_OUTPUT_DIR)
     return p.parse_args()
 
@@ -144,10 +147,13 @@ def main(run_id: str | None = None) -> None:
         n_components    = 3,
     )
 
-    # Save encoder for later transform()
-    encoder_path = output_dir / run_id / METHOD_NAME / "encoder.pkl"
-    joblib.dump(reducer, encoder_path)
-    print(f"  encoder.pkl  saved")
+    if args.save_encoder:
+        # Save encoder for later transform()
+        encoder_path = output_dir / METHOD_NAME / run_id / "encoder.pkl"
+        joblib.dump(reducer, encoder_path)
+        print(f"  encoder.pkl  saved")
+    else:
+        print("  encoder.pkl  skipped (use --save-encoder to enable)")
 
     print(f"\nDone. Run: {run_id}")
 
