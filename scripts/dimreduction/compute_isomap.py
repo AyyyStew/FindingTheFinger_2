@@ -29,6 +29,10 @@ from .shared import (
 
 METHOD_NAME          = "isomap"
 DEFAULT_N_NEIGHBORS  = 10
+DEFAULT_N_JOBS       = 1
+DEFAULT_PATH_METHOD  = "D"
+DEFAULT_EIGEN_SOLVER = "arpack"
+DEFAULT_TRANSFORM_BATCH_SIZE = 2048
 
 
 def parse_args():
@@ -36,26 +40,63 @@ def parse_args():
     p.add_argument("--run-id",              default=None)
     p.add_argument("--label",               default=None)
     p.add_argument("--n-neighbors",         type=int, default=DEFAULT_N_NEIGHBORS)
+    p.add_argument("--n-jobs",              type=int, default=DEFAULT_N_JOBS,
+                   help="Parallel jobs used by Isomap neighbor graph build")
+    p.add_argument("--path-method",         choices=["auto", "D", "FW"], default=DEFAULT_PATH_METHOD,
+                   help="Shortest-path algorithm for geodesic distances")
+    p.add_argument("--eigen-solver",        choices=["auto", "arpack", "dense"], default=DEFAULT_EIGEN_SOLVER,
+                   help="Eigen solver used in kernel PCA step")
+    p.add_argument("--transform-batch-size", type=int, default=DEFAULT_TRANSFORM_BATCH_SIZE,
+                   help="Batch size for iso.transform over all points to cap RAM usage")
     p.add_argument("--sample-per-division", type=int, default=DEFAULT_SAMPLE_PER_DIV)
     p.add_argument("--no-sample",           action="store_true")
     p.add_argument("--output-dir",          default=DEFAULT_OUTPUT_DIR)
     return p.parse_args()
 
 
+def _transform_in_batches(iso, matrix: np.ndarray, batch_size: int) -> np.ndarray:
+    if batch_size <= 0 or batch_size >= len(matrix):
+        return np.array(iso.transform(matrix), dtype=np.float32)
+
+    n = len(matrix)
+    out = np.empty((n, 3), dtype=np.float32)
+    n_batches = (n + batch_size - 1) // batch_size
+    for bi, start in enumerate(range(0, n, batch_size), start=1):
+        end = min(start + batch_size, n)
+        out[start:end] = np.array(iso.transform(matrix[start:end]), dtype=np.float32)
+        print(f"    transform batch {bi}/{n_batches}  rows {start:,}:{end:,}")
+    return out
+
+
 def run_isomap(matrix: np.ndarray, n_neighbors: int,
-               sample_indices: np.ndarray | None = None):
+               sample_indices: np.ndarray | None = None,
+               n_jobs: int = DEFAULT_N_JOBS,
+               path_method: str = DEFAULT_PATH_METHOD,
+               eigen_solver: str = DEFAULT_EIGEN_SOLVER,
+               transform_batch_size: int = DEFAULT_TRANSFORM_BATCH_SIZE):
     from sklearn.manifold import Isomap
 
     fit_matrix = matrix[sample_indices] if sample_indices is not None else matrix
     label = (f"sample n={len(fit_matrix):,}" if sample_indices is not None
              else f"all n={len(matrix):,}")
-    print(f"\nFitting Isomap  n_neighbors={n_neighbors}  on {label}...")
+    print(
+        f"\nFitting Isomap  n_neighbors={n_neighbors}  n_jobs={n_jobs}"
+        f"  path_method={path_method}  eigen_solver={eigen_solver}  on {label}..."
+    )
 
-    iso = Isomap(n_components=3, n_neighbors=n_neighbors, n_jobs=-1)
+    iso = Isomap(
+        n_components=3,
+        n_neighbors=n_neighbors,
+        n_jobs=n_jobs,
+        path_method=path_method,
+        eigen_solver=eigen_solver,
+    )
     iso.fit(fit_matrix)
 
     print(f"  Fit done. Transforming all {len(matrix):,} points...")
-    coords = np.array(iso.transform(matrix), dtype=np.float32)
+    if 0 < transform_batch_size < len(matrix):
+        print(f"  Using batched transform  batch_size={transform_batch_size:,}")
+    coords = _transform_in_batches(iso, matrix, transform_batch_size)
     print(f"  Done.  x∈[{coords[:,0].min():.3f}, {coords[:,0].max():.3f}]"
           f"  y∈[{coords[:,1].min():.3f}, {coords[:,1].max():.3f}]"
           f"  z∈[{coords[:,2].min():.3f}, {coords[:,2].max():.3f}]")
@@ -84,7 +125,15 @@ def main(run_id: str | None = None) -> None:
             if unassigned_ids:
                 print_unassigned(session, unassigned_ids)
 
-        iso, coords = run_isomap(matrix, args.n_neighbors, sample_indices)
+        iso, coords = run_isomap(
+            matrix,
+            args.n_neighbors,
+            sample_indices,
+            n_jobs=args.n_jobs,
+            path_method=args.path_method,
+            eigen_solver=args.eigen_solver,
+            transform_batch_size=args.transform_batch_size,
+        )
 
         print("Aggregating parent positions...")
         positions = aggregate_parents(unit_ids, coords, children_of, parent_of)
@@ -106,6 +155,10 @@ def main(run_id: str | None = None) -> None:
         manifest_extra  = {
             "label":       args.label,
             "n_neighbors": args.n_neighbors,
+            "n_jobs":      args.n_jobs,
+            "path_method": args.path_method,
+            "eigen_solver": args.eigen_solver,
+            "transform_batch_size": args.transform_batch_size,
             "sampled":     sample_indices is not None,
         },
         positions       = positions,
