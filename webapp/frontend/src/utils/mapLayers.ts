@@ -35,6 +35,8 @@ export interface MapVisibility {
   scatterDepth: Record<number, boolean>;
   /** corpus_id → visible. Absent key means visible. Empty object = all visible. */
   corpora: Record<number, boolean>;
+  /** corpus_version_id → visible. Absent key means visible. Empty object = all visible. */
+  corpusVersions: Record<number, boolean>;
 }
 
 export type KdeBreakdown = "overall" | "corpus";
@@ -67,7 +69,13 @@ export function defaultVisibility(
   for (const h of heights) scatter[h] = h === 0; // leaves on by default
   const scatterDepth: Record<number, boolean> = {};
   for (const d of depths) scatterDepth[d] = true; // all depths on by default
-  return { scatterMode: "depth", scatter, scatterDepth, corpora: {} };
+  return {
+    scatterMode: "depth",
+    scatter,
+    scatterDepth,
+    corpora: {},
+    corpusVersions: {},
+  };
 }
 
 // ── Color map ─────────────────────────────────────────────────────────────────
@@ -149,10 +157,15 @@ function hslToRgb255(
 // ── Color array builder ───────────────────────────────────────────────────────
 
 function buildPointStyleArrays(
-  layer: { count: number; corpusIds: Int32Array },
+  layer: {
+    count: number;
+    corpusIds: Int32Array;
+    corpusVersionIds: Int32Array;
+  },
   colorMap: CorpusColorMap,
   alpha: number,
   hiddenCorpora: Set<number>,
+  hiddenVersions: Set<number>,
   selectedUnitIds: Set<number> | null,
   unitIds: Int32Array,
 ): { fillColors: Uint8Array; lineColors: Uint8Array } {
@@ -161,12 +174,15 @@ function buildPointStyleArrays(
   const fallback: [number, number, number] = [110, 110, 110];
   for (let i = 0; i < layer.count; i++) {
     const corpusId = layer.corpusIds[i];
+    const corpusVersionId = layer.corpusVersionIds[i];
+    const hidden =
+      hiddenCorpora.has(corpusId) || hiddenVersions.has(corpusVersionId);
     const selected = selectedUnitIds?.has(unitIds[i]) ?? false;
     const [r, g, b] = colorMap.get(corpusId) ?? fallback;
     fillColors[i * 4] = selected ? 201 : r;
     fillColors[i * 4 + 1] = selected ? 169 : g;
     fillColors[i * 4 + 2] = selected ? 110 : b;
-    fillColors[i * 4 + 3] = hiddenCorpora.has(corpusId)
+    fillColors[i * 4 + 3] = hidden
       ? 0
       : selected
         ? 235
@@ -175,7 +191,7 @@ function buildPointStyleArrays(
     lineColors[i * 4] = selected ? 255 : 30;
     lineColors[i * 4 + 1] = selected ? 243 : 34;
     lineColors[i * 4 + 2] = selected ? 209 : 42;
-    lineColors[i * 4 + 3] = hiddenCorpora.has(corpusId)
+    lineColors[i * 4 + 3] = hidden
       ? 0
       : selected
         ? 235
@@ -204,6 +220,11 @@ export function buildScatterLayers(
       .filter(([, v]) => !v)
       .map(([k]) => Number(k)),
   );
+  const hiddenVersions = new Set(
+    Object.entries(visibility.corpusVersions)
+      .filter(([, v]) => !v)
+      .map(([k]) => Number(k)),
+  );
   return data.manifest.heights
     .filter((h) => visibility.scatter[h] !== false)
     .map((h) => {
@@ -217,6 +238,7 @@ export function buildScatterLayers(
         colorMap,
         alpha,
         hiddenCorpora,
+        hiddenVersions,
         selectedUnitIds,
         layer.unitIds,
       );
@@ -246,6 +268,7 @@ export function buildScatterLayers(
             colorMap.size,
             alpha,
             visibility.corpora,
+            visibility.corpusVersions,
             selectedUnitIds?.size ?? 0,
           ],
         },
@@ -271,6 +294,11 @@ export function buildDepthScatterLayers(
       .filter(([, v]) => !v)
       .map(([k]) => Number(k)),
   );
+  const hiddenVersions = new Set(
+    Object.entries(visibility.corpusVersions)
+      .filter(([, v]) => !v)
+      .map(([k]) => Number(k)),
+  );
 
   const maxDepth = data.manifest.max_depth;
   return data.manifest.depths
@@ -288,6 +316,7 @@ export function buildDepthScatterLayers(
         colorMap,
         alpha,
         hiddenCorpora,
+        hiddenVersions,
         selectedUnitIds,
         layer.unitIds,
       );
@@ -316,6 +345,7 @@ export function buildDepthScatterLayers(
             colorMap.size,
             alpha,
             visibility.corpora,
+            visibility.corpusVersions,
             selectedUnitIds?.size ?? 0,
           ],
         },
@@ -410,6 +440,7 @@ interface VisiblePointLayer {
   unitIds: Int32Array;
   positions: Float32Array;
   corpusIds: Int32Array;
+  corpusVersionIds: Int32Array;
 }
 
 interface CellDatum {
@@ -483,6 +514,10 @@ function hiddenCorporaKey(hiddenCorpora: Set<number>): string {
   return [...hiddenCorpora].sort((a, b) => a - b).join(",");
 }
 
+function hiddenVersionsKey(hiddenVersions: Set<number>): string {
+  return [...hiddenVersions].sort((a, b) => a - b).join(",");
+}
+
 function boundsKey(data: StandardRunData): string {
   const { minX, minY, maxX, maxY } = data.bounds;
   return `${minX},${minY},${maxX},${maxY}`;
@@ -518,6 +553,14 @@ function hiddenCorpusSet(visibility: MapVisibility): Set<number> {
   );
 }
 
+function hiddenVersionSet(visibility: MapVisibility): Set<number> {
+  return new Set(
+    Object.entries(visibility.corpusVersions)
+      .filter(([, v]) => !v)
+      .map(([k]) => Number(k)),
+  );
+}
+
 function visiblePointLayers(
   data: StandardRunData,
   visibility: MapVisibility,
@@ -536,6 +579,7 @@ function visiblePointLayers(
               unitIds: layer.unitIds,
               positions: layer.positions,
               corpusIds: layer.corpusIds,
+              corpusVersionIds: layer.corpusVersionIds,
             }
           : null;
       })
@@ -555,6 +599,7 @@ function visiblePointLayers(
             unitIds: layer.unitIds,
             positions: layer.positions,
             corpusIds: layer.corpusIds,
+            corpusVersionIds: layer.corpusVersionIds,
           }
         : null;
     })
@@ -564,7 +609,10 @@ function visiblePointLayers(
 function visibleLayerPoints(
   layer: VisiblePointLayer,
   hiddenCorpora: Set<number>,
-  includePoint: ((unitId: number, corpusId: number) => boolean) | null = null,
+  hiddenVersions: Set<number>,
+  includePoint:
+    | ((unitId: number, corpusId: number, corpusVersionId: number) => boolean)
+    | null = null,
 ) {
   const points: {
     unitId: number;
@@ -573,9 +621,12 @@ function visibleLayerPoints(
   }[] = [];
   for (let i = 0; i < layer.count; i++) {
     const corpusId = layer.corpusIds[i];
+    const corpusVersionId = layer.corpusVersionIds[i];
     if (hiddenCorpora.has(corpusId)) continue;
+    if (hiddenVersions.has(corpusVersionId)) continue;
     const unitId = layer.unitIds[i];
-    if (includePoint && !includePoint(unitId, corpusId)) continue;
+    if (includePoint && !includePoint(unitId, corpusId, corpusVersionId))
+      continue;
     points.push({
       unitId,
       corpusId,
@@ -646,6 +697,7 @@ export function buildVoronoiLayers(
   colorMap: CorpusColorMap,
 ): Layer[] {
   const hiddenCorpora = hiddenCorpusSet(visibility);
+  const hiddenVersions = hiddenVersionSet(visibility);
   const bbox = boundsBox(data);
   const layers = visiblePointLayers(data, visibility);
   const cacheKey = [
@@ -654,6 +706,7 @@ export function buildVoronoiLayers(
     visibility.scatterMode,
     pointLayersKey(layers),
     hiddenCorporaKey(hiddenCorpora),
+    hiddenVersionsKey(hiddenVersions),
     mapColorKey(colorMap),
   ].join("|");
   const cached = getCached(voronoiDataCache, cacheKey);
@@ -668,6 +721,7 @@ export function buildVoronoiLayers(
         const points = visibleLayerPoints(
           layer,
           hiddenCorpora,
+          hiddenVersions,
           includeVoronoiPoint,
         );
         if (points.length < 2) return null;
@@ -724,6 +778,7 @@ function voronoiDatumToLayer(datum: VoronoiLayerDatum): SolidPolygonLayer {
 function kdeGroups(
   layers: VisiblePointLayer[],
   hiddenCorpora: Set<number>,
+  hiddenVersions: Set<number>,
   breakdown: KdeBreakdown,
   colorMap: CorpusColorMap,
 ) {
@@ -737,8 +792,14 @@ function kdeGroups(
   >();
   const kdeHiddenCorpora =
     breakdown === "corpus" ? new Set<number>() : hiddenCorpora;
+  const kdeHiddenVersions =
+    breakdown === "corpus" ? new Set<number>() : hiddenVersions;
   for (const layer of layers) {
-    const points = visibleLayerPoints(layer, kdeHiddenCorpora);
+    const points = visibleLayerPoints(
+      layer,
+      kdeHiddenCorpora,
+      kdeHiddenVersions,
+    );
     for (const point of points) {
       const key =
         breakdown === "corpus" ? `corpus-${point.corpusId}` : "overall";
@@ -771,6 +832,7 @@ export function buildKdeCloudLayers(
 ): Layer[] {
   const layers = visiblePointLayers(data, visibility);
   const hiddenCorpora = hiddenCorpusSet(visibility);
+  const hiddenVersions = hiddenVersionSet(visibility);
   const [minX, minY, maxX, maxY] = kdeBoundsBox(data);
   const width = maxX - minX;
   const height = maxY - minY;
@@ -789,6 +851,7 @@ export function buildKdeCloudLayers(
     breakdown,
     pointLayersKey(layers),
     breakdown === "corpus" ? "all-corpora" : hiddenCorporaKey(hiddenCorpora),
+    breakdown === "corpus" ? "all-versions" : hiddenVersionsKey(hiddenVersions),
     mapColorKey(colorMap),
   ].join("|");
   const cached = getCached(kdeDataCache, cacheKey);
@@ -797,7 +860,7 @@ export function buildKdeCloudLayers(
     setCached(
       kdeDataCache,
       cacheKey,
-      kdeGroups(layers, hiddenCorpora, breakdown, colorMap)
+      kdeGroups(layers, hiddenCorpora, hiddenVersions, breakdown, colorMap)
         .map((group, groupIndex) => {
           const fieldSize = grid + 1;
           const densities = new Float32Array(fieldSize * fieldSize);
@@ -896,7 +959,13 @@ export function buildKdeCloudLayers(
     for (const layer of layers) {
       for (let i = 0; i < layer.count; i++) {
         const corpusId = layer.corpusIds[i];
-        if (!hiddenCorpora.has(corpusId)) visibleCorpusIds.add(corpusId);
+        const corpusVersionId = layer.corpusVersionIds[i];
+        if (
+          !hiddenCorpora.has(corpusId) &&
+          !hiddenVersions.has(corpusVersionId)
+        ) {
+          visibleCorpusIds.add(corpusId);
+        }
       }
     }
   }
@@ -952,6 +1021,7 @@ export function buildLabelLayers(
   depths: number[],
 ): Layer[] {
   const hiddenCorpora = hiddenCorpusSet(visibility);
+  const hiddenVersions = hiddenVersionSet(visibility);
   const selectedDepths = [...new Set(depths)]
     .filter((depth) => depth >= 0 && depth <= data.manifest.max_depth)
     .sort((a, b) => a - b);
@@ -961,6 +1031,7 @@ export function buildLabelLayers(
     includeCorpusLabels ? "corpus" : "units",
     selectedDepths.join(","),
     hiddenCorporaKey(hiddenCorpora),
+    hiddenVersionsKey(hiddenVersions),
     mapColorKey(colorMap),
     mapLabelKey(corpusLabelMap),
   ].join("|");
@@ -981,7 +1052,9 @@ export function buildLabelLayers(
             >();
             for (let i = 0; i < corpusLayer.count; i++) {
               const corpusId = corpusLayer.corpusIds[i];
+              const corpusVersionId = corpusLayer.corpusVersionIds[i];
               if (hiddenCorpora.has(corpusId)) continue;
+              if (hiddenVersions.has(corpusVersionId)) continue;
               const current = corpusCentroids.get(corpusId) ?? {
                 x: 0,
                 y: 0,
@@ -1017,7 +1090,9 @@ export function buildLabelLayers(
           if (!layer) continue;
           for (let i = 0; i < layer.count; i++) {
             const corpusId = layer.corpusIds[i];
+            const corpusVersionId = layer.corpusVersionIds[i];
             if (hiddenCorpora.has(corpusId)) continue;
+            if (hiddenVersions.has(corpusVersionId)) continue;
             const text = data.unitLabels[String(layer.unitIds[i])];
             if (!text) continue;
             const [r, g, b] = colorMap.get(corpusId) ?? [210, 210, 210];

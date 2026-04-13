@@ -13,6 +13,7 @@ Binary format (columnar, little-endian):
         …
         [component_K-1: N × float32]
         [corpus_ids:    N × int32]
+        [corpus_version_ids: N × int32]
         [corpus_seqs:   N × int32]
         [ancestor_h1:   N × int32]
         …
@@ -25,6 +26,7 @@ Binary format (columnar, little-endian):
         …
         [component_K-1: N × float32]
         [corpus_ids:    N × int32]
+        [corpus_version_ids: N × int32]
 
 Standard methods (UMAP, PHATE, Isomap) use K=2.
 PCA uses K = number of retained principal components (stored in manifest).
@@ -60,11 +62,19 @@ RANDOM_STATE        = 42
 def load_unit_tree(session: Session):
     """
     Load full unit tree in one query.
-    Returns: parent_of, children_of, height_of, depth_of, corpus_id_of
+    Returns:
+      parent_of, children_of, height_of, depth_of, corpus_id_of, corpus_version_id_of
     """
     print("Loading unit tree...")
     rows = session.execute(
-        select(Unit.id, Unit.parent_id, Unit.height, Unit.depth, Unit.corpus_id)
+        select(
+            Unit.id,
+            Unit.parent_id,
+            Unit.height,
+            Unit.depth,
+            Unit.corpus_id,
+            Unit.corpus_version_id,
+        )
     ).all()
 
     parent_of:    dict[int, int]       = {}
@@ -72,8 +82,9 @@ def load_unit_tree(session: Session):
     height_of:    dict[int, int]       = {}
     depth_of:     dict[int, int]       = {}
     corpus_id_of: dict[int, int]       = {}
+    corpus_version_id_of: dict[int, int] = {}
 
-    for uid, pid, h, d, cid in rows:
+    for uid, pid, h, d, cid, cvid in rows:
         if pid is not None:
             parent_of[uid] = pid
             children_of[pid].append(uid)
@@ -83,9 +94,18 @@ def load_unit_tree(session: Session):
             depth_of[uid] = d
         if cid is not None:
             corpus_id_of[uid] = cid
+        if cvid is not None:
+            corpus_version_id_of[uid] = cvid
 
     print(f"  {len(height_of):,} units loaded")
-    return parent_of, dict(children_of), height_of, depth_of, corpus_id_of
+    return (
+        parent_of,
+        dict(children_of),
+        height_of,
+        depth_of,
+        corpus_id_of,
+        corpus_version_id_of,
+    )
 
 
 def load_embeddings(session: Session) -> tuple[list[int], np.ndarray]:
@@ -296,6 +316,7 @@ def write_method_output(
     height_of: dict[int, int],
     depth_of: dict[int, int],
     corpus_id_of: dict[int, int],
+    corpus_version_id_of: dict[int, int],
     corpus_seqs: dict[int, int],
     leaf_ancestors: dict[int, dict[int, int]],
     unit_labels: dict[int, str],
@@ -328,6 +349,7 @@ def write_method_output(
         uids = sorted(by_height[h])
         ids  = np.array(uids, dtype=np.int32)
         cids = np.array([corpus_id_of.get(u, 0) for u in uids], dtype=np.int32)
+        cvids = np.array([corpus_version_id_of.get(u, 0) for u in uids], dtype=np.int32)
 
         cols: list[tuple[np.ndarray, str]] = [(ids, "int32")]
 
@@ -338,6 +360,7 @@ def write_method_output(
         if h == 0:
             seqs = np.array([corpus_seqs.get(u, 0) for u in uids], dtype=np.int32)
             cols.append((cids, "int32"))
+            cols.append((cvids, "int32"))
             cols.append((seqs, "int32"))
             for ah in range(1, max_height + 1):
                 anc = np.array(
@@ -347,6 +370,7 @@ def write_method_output(
                 cols.append((anc, "int32"))
         else:
             cols.append((cids, "int32"))
+            cols.append((cvids, "int32"))
 
         bin_path = method_dir / f"height_{h}.bin"
         _write_columnar_bin(bin_path, cols)
@@ -355,7 +379,8 @@ def write_method_output(
 
     # ── Depth bins ────────────────────────────────────────────────────────────
     # Each depth_D.bin contains all units at depth D from the corpus root.
-    # Format: [N][unit_ids][comp_0]...[comp_K-1][corpus_ids]
+    # Format:
+    # [N][unit_ids][comp_0]...[comp_K-1][corpus_ids][corpus_version_ids]
     # No ancestor columns — depth bins are for visibility/rendering only.
 
     by_depth: dict[int, list[int]] = defaultdict(list)
@@ -371,12 +396,14 @@ def write_method_output(
         uids = sorted(by_depth[d])
         ids  = np.array(uids, dtype=np.int32)
         cids = np.array([corpus_id_of.get(u, 0) for u in uids], dtype=np.int32)
+        cvids = np.array([corpus_version_id_of.get(u, 0) for u in uids], dtype=np.int32)
 
         cols = [(ids, "int32")]
         for k in range(n_components):
             col = np.array([float(positions[u][k]) for u in uids], dtype=np.float32)
             cols.append((col, "float32"))
         cols.append((cids, "int32"))
+        cols.append((cvids, "int32"))
 
         bin_path = method_dir / f"depth_{d}.bin"
         _write_columnar_bin(bin_path, cols)
@@ -395,6 +422,8 @@ def write_method_output(
         "created_at":       datetime.now(timezone.utc).isoformat(),
         "method":           method_name,
         "embedding_method": METHOD_LABEL,
+        "bin_schema_version": 2,
+        "has_corpus_version_ids": True,
         "max_height":       max_height,
         "heights":          sorted(by_height.keys()),
         "point_counts":     point_counts,

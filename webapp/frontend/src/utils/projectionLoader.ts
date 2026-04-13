@@ -7,18 +7,18 @@
  *   height_0.bin:
  *     [N:uint32] [unitIds:i32×N]
  *     [comp_0:f32×N] … [comp_{K-1}:f32×N]   ← K from manifest.n_components
- *     [corpusIds:i32×N] [corpusSeqs:i32×N]
+ *     [corpusIds:i32×N] [corpusVersionIds:i32×N] [corpusSeqs:i32×N]
  *     [ancestor_h1:i32×N] … [ancestor_hH:i32×N]
  *
  *   height_N.bin (N > 0):
  *     [N:uint32] [unitIds:i32×N]
  *     [comp_0:f32×N] … [comp_{K-1}:f32×N]
- *     [corpusIds:i32×N]
+ *     [corpusIds:i32×N] [corpusVersionIds:i32×N]
  *
  *   depth_D.bin (all depths, no ancestor columns):
  *     [N:uint32] [unitIds:i32×N]
  *     [comp_0:f32×N] … [comp_{K-1}:f32×N]
- *     [corpusIds:i32×N]
+ *     [corpusIds:i32×N] [corpusVersionIds:i32×N]
  *
  * Standard methods (UMAP, PHATE, Isomap): K>=2; frontend uses xyz when present.
  * PCA: K=n_components (all retained PCs). Frontend picks any three to display.
@@ -51,6 +51,9 @@ interface BaseManifest {
   label:            string | null;
   method:           ProjectionMethod;
   embedding_method: string;
+  /** Hard-cutover bin schema version with corpusVersionIds columns. */
+  bin_schema_version: number;
+  has_corpus_version_ids: boolean;
   max_height:       number;
   heights:          number[];
   point_counts:     Record<string, number>;
@@ -108,6 +111,7 @@ export interface LeafLayerData {
   unitIds: Int32Array;
   positions: Float32Array;
   corpusIds: Int32Array;
+  corpusVersionIds: Int32Array;
   corpusSeqs: Int32Array;
   /**
    * ancestors[i] = unit IDs at height (i+1).
@@ -123,6 +127,7 @@ export interface ParentLayerData {
   unitIds: Int32Array;
   positions: Float32Array;
   corpusIds: Int32Array;
+  corpusVersionIds: Int32Array;
 }
 
 export type HeightLayerData = LeafLayerData | ParentLayerData;
@@ -138,6 +143,7 @@ export interface PcaLeafLayerData {
   /** components[k] = Float32Array of N values for the k-th PC (0-indexed). */
   components: Float32Array[];
   corpusIds: Int32Array;
+  corpusVersionIds: Int32Array;
   corpusSeqs: Int32Array;
   ancestors: Int32Array[];
 }
@@ -148,6 +154,7 @@ export interface PcaParentLayerData {
   unitIds: Int32Array;
   components: Float32Array[];
   corpusIds: Int32Array;
+  corpusVersionIds: Int32Array;
 }
 
 export type PcaHeightLayerData = PcaLeafLayerData | PcaParentLayerData;
@@ -163,6 +170,7 @@ export interface DepthLayerData {
   unitIds: Int32Array;
   positions: Float32Array;
   corpusIds: Int32Array;
+  corpusVersionIds: Int32Array;
 }
 
 /** PCA depth layer — raw components, pick any two for positions. */
@@ -172,6 +180,7 @@ export interface PcaDepthLayerData {
   unitIds: Int32Array;
   components: Float32Array[];
   corpusIds: Int32Array;
+  corpusVersionIds: Int32Array;
 }
 
 // ── Run data types ────────────────────────────────────────────────────────────
@@ -256,6 +265,7 @@ export function resolvePcaData(
         unitIds: leaf.unitIds,
         positions,
         corpusIds: leaf.corpusIds,
+        corpusVersionIds: leaf.corpusVersionIds,
         corpusSeqs: leaf.corpusSeqs,
         ancestors: leaf.ancestors,
       });
@@ -266,6 +276,7 @@ export function resolvePcaData(
         unitIds: pcaLayer.unitIds,
         positions,
         corpusIds: pcaLayer.corpusIds,
+        corpusVersionIds: pcaLayer.corpusVersionIds,
       });
     }
   }
@@ -278,6 +289,7 @@ export function resolvePcaData(
       unitIds: pcaDepthLayer.unitIds,
       positions: buildPcaPositions(pcaDepthLayer, xPc, yPc, zPc),
       corpusIds: pcaDepthLayer.corpusIds,
+      corpusVersionIds: pcaDepthLayer.corpusVersionIds,
     });
   }
 
@@ -310,7 +322,16 @@ export async function fetchManifest(
     res = await fetch(`${BASE_URL}/${runId}/${method}/manifest.json`);
   }
   if (!res.ok) throw new Error(`Failed to load ${method} manifest (${res.status})`);
-  return res.json() as Promise<ProjectionManifest>;
+  const manifest = await res.json() as ProjectionManifest;
+  if (
+    manifest.bin_schema_version < 2 ||
+    manifest.has_corpus_version_ids !== true
+  ) {
+    throw new Error(
+      `Unsupported ${method} projection schema for run ${runId}. Regenerate dimreduction artifacts with corpus_version_ids.`,
+    );
+  }
+  return manifest;
 }
 
 export async function fetchUnitLabels(
@@ -398,6 +419,7 @@ function parseHeightBin(
   }
 
   const corpusIds = reader.readI32(N);
+  const corpusVersionIds = reader.readI32(N);
 
   if (isPca) {
     // PCA path: return raw components without interleaving
@@ -409,12 +431,16 @@ function parseHeightBin(
       }
       return {
         height: 0, count: N, unitIds,
-        components: compCols, corpusIds, corpusSeqs, ancestors,
+        components: compCols,
+        corpusIds,
+        corpusVersionIds,
+        corpusSeqs,
+        ancestors,
       } as PcaLeafLayerData;
     }
     return {
       height, count: N, unitIds,
-      components: compCols, corpusIds,
+      components: compCols, corpusIds, corpusVersionIds,
     } as PcaParentLayerData;
   }
 
@@ -433,16 +459,23 @@ function parseHeightBin(
     }
     return {
       height: 0, count: N, unitIds,
-      positions, corpusIds, corpusSeqs, ancestors,
+      positions, corpusIds, corpusVersionIds, corpusSeqs, ancestors,
     } as LeafLayerData;
   }
 
-  return { height, count: N, unitIds, positions, corpusIds } as ParentLayerData;
+  return {
+    height,
+    count: N,
+    unitIds,
+    positions,
+    corpusIds,
+    corpusVersionIds,
+  } as ParentLayerData;
 }
 
 /**
  * Parse a depth_D.bin buffer.
- * Format: [N][unitIds][comp_0]…[comp_K-1][corpusIds]
+ * Format: [N][unitIds][comp_0]…[comp_K-1][corpusIds][corpusVersionIds]
  * No ancestor columns — simpler than height bins.
  */
 function parseDepthBin(
@@ -459,16 +492,31 @@ function parseDepthBin(
   const compCols: Float32Array[] = [];
   for (let k = 0; k < K; k++) compCols.push(reader.readF32(N));
   const corpusIds = reader.readI32(N);
+  const corpusVersionIds = reader.readI32(N);
 
   if (isPca) {
-    return { depth, count: N, unitIds, components: compCols, corpusIds } as PcaDepthLayerData;
+    return {
+      depth,
+      count: N,
+      unitIds,
+      components: compCols,
+      corpusIds,
+      corpusVersionIds,
+    } as PcaDepthLayerData;
   }
 
   const x = compCols[0];
   const y = compCols[1];
   const z = compCols[2] ?? new Float32Array(N);
   const positions = buildInterleavedPositions3(x, y, z, N);
-  return { depth, count: N, unitIds, positions, corpusIds } as DepthLayerData;
+  return {
+    depth,
+    count: N,
+    unitIds,
+    positions,
+    corpusIds,
+    corpusVersionIds,
+  } as DepthLayerData;
 }
 
 // ── Bounds ────────────────────────────────────────────────────────────────────

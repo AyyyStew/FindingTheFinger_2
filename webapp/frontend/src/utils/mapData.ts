@@ -65,6 +65,7 @@ export function normalizeVisibilityForData(
     scatter,
     scatterDepth,
     corpora: current.corpora,
+    corpusVersions: current.corpusVersions,
   };
 }
 
@@ -78,19 +79,34 @@ export function buildVisibleUnitIds(
       .filter(([, v]) => !v)
       .map(([k]) => Number(k)),
   );
+  const hiddenVersions = new globalThis.Set(
+    Object.entries(visibility.corpusVersions)
+      .filter(([, v]) => !v)
+      .map(([k]) => Number(k)),
+  );
 
   if (visibility.scatterMode === 'height') {
     for (const [h, layer] of data.layers) {
       if (visibility.scatter[h] === false) continue;
       for (let i = 0; i < layer.count; i++) {
-        if (!hiddenCorpora.has(layer.corpusIds[i])) set.add(layer.unitIds[i]);
+        if (
+          !hiddenCorpora.has(layer.corpusIds[i]) &&
+          !hiddenVersions.has(layer.corpusVersionIds[i])
+        ) {
+          set.add(layer.unitIds[i]);
+        }
       }
     }
   } else {
     for (const [d, layer] of data.depthLayers) {
       if (visibility.scatterDepth[d] === false) continue;
       for (let i = 0; i < layer.count; i++) {
-        if (!hiddenCorpora.has(layer.corpusIds[i])) set.add(layer.unitIds[i]);
+        if (
+          !hiddenCorpora.has(layer.corpusIds[i]) &&
+          !hiddenVersions.has(layer.corpusVersionIds[i])
+        ) {
+          set.add(layer.unitIds[i]);
+        }
       }
     }
   }

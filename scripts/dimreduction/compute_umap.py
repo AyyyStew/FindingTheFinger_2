@@ -84,7 +84,14 @@ def main(run_id: str | None = None) -> None:
     output_dir = Path(args.output_dir)
 
     with get_session() as session:
-        parent_of, children_of, height_of, depth_of, corpus_id_of = load_unit_tree(session)
+        (
+            parent_of,
+            children_of,
+            height_of,
+            depth_of,
+            corpus_id_of,
+            corpus_version_id_of,
+        ) = load_unit_tree(session)
         max_height = max(height_of.values()) if height_of else 0
         print(f"  max height: {max_height}")
 
@@ -140,6 +147,7 @@ def main(run_id: str | None = None) -> None:
         height_of       = height_of,
         depth_of        = depth_of,
         corpus_id_of    = corpus_id_of,
+        corpus_version_id_of = corpus_version_id_of,
         corpus_seqs     = corpus_seqs,
         leaf_ancestors  = leaf_ancestors,
         unit_labels     = unit_labels,
