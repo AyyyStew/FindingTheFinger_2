@@ -1,0 +1,19 @@
+[project]
+name = "ftf-scripts"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "ftf-db",
+    "joblib",
+    "numpy",
+    "phate",
+    "scikit-learn",
+    "sqlalchemy",
+    "umap-learn",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+ftf-db = { workspace = true }

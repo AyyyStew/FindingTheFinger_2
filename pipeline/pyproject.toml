@@ -1,0 +1,32 @@
+[project]
+name = "ftf-pipeline"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "EbookLib",
+    "alembic",
+    "beautifulsoup4",
+    "ftf-db",
+    "numpy",
+    "pgvector",
+    "python-dotenv",
+    "sentence-transformers",
+    "sqlalchemy",
+    "torch",
+    "torchvision",
+    "tqdm",
+    "transformers",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+ftf-db = { workspace = true }
+torch = { index = "pytorch-cu126" }
+torchvision = { index = "pytorch-cu126" }
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true

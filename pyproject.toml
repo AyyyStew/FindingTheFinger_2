@@ -1,0 +1,16 @@
+[project]
+name = "finding-the-finger"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+    "db",
+    "pipeline",
+    "scripts",
+    "webapp/backend",
+]

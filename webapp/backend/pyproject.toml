@@ -1,0 +1,22 @@
+[project]
+name = "ftf-backend"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "einops",
+    "fastapi",
+    "ftf-db",
+    "pgvector",
+    "psycopg[binary]",
+    "pydantic",
+    "python-dotenv",
+    "sentence-transformers",
+    "sqlalchemy",
+    "uvicorn[standard]",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+ftf-db = { workspace = true }

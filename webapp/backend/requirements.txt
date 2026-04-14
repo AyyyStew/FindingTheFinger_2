@@ -1,9 +1,0 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-psycopg[binary]
-pgvector
-python-dotenv
-sentence-transformers
-pydantic
-einops

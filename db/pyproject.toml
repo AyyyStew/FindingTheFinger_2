@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ftf-db"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "pgvector",
+    "psycopg[binary]",
+    "python-dotenv",
+    "sqlalchemy",
+]
+
+[tool.setuptools]
+packages = ["db"]
+package-dir = { "db" = "." }
