@@ -45,6 +45,16 @@ class MethodInfo(BaseModel):
     vector_dim: int
 
 
+class EmbeddingProfileInfo(BaseModel):
+    id: int
+    label: str
+    target_tokens: int
+    overlap_tokens: int
+    min_tokens: int
+    max_tokens: int
+    model_name: str
+
+
 # ---------------------------------------------------------------------------
 # Units
 # ---------------------------------------------------------------------------
@@ -91,6 +101,7 @@ class CompareRequest(BaseModel):
     reference_unit_id: int
     unit_ids: list[int]
     method_id: int | None = None
+    embedding_profile_id: int | None = None
 
 
 class CompareItem(BaseModel):
@@ -102,6 +113,7 @@ class CompareItem(BaseModel):
 class CompareResponse(BaseModel):
     reference_unit: UnitBrief
     method_id: int
+    embedding_profile_id: int | None = None
     items: list[CompareItem]
 
 
@@ -119,16 +131,20 @@ class SearchResult(BaseModel):
     height: int | None
     score: float  # cosine similarity 0–1; always 1.0 for keyword
     taxonomy: list[TaxonomyLabel]  # full ancestor chain, for color-coding
+    embedding_span_id: int | None = None
+    embedding_profile_id: int | None = None
 
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]
     mode: str  # "semantic" | "keyword" | "passage"
+    embedding_profile_id: int | None = None
 
 
 class SemanticSearchRequest(BaseModel):
     query: str
     method_id: int | None = None
+    embedding_profile_id: int | None = None
     height_min: int | None = None
     height_max: int | None = None
     depth_min: int | None = None
@@ -152,6 +168,7 @@ class KeywordSearchRequest(BaseModel):
 class PassageSearchRequest(BaseModel):
     unit_id: int
     method_id: int | None = None
+    embedding_profile_id: int | None = None
     height_min: int | None = None
     height_max: int | None = None
     depth_min: int | None = None

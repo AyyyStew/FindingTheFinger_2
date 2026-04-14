@@ -12,14 +12,17 @@ Table overview:
     corpus_level      — defines what each height means for a corpus (0=Verse, 1=Chapter, ...)
     unit              — every node in the text tree (verse, chapter, book, etc.)
     method            — describes how an embedding was generated
-    embedding         — vector embedding tied to a unit + method
+    embedding_profile — segmentation profile for normalized embedding spans
+    embedding_span    — derived text span used for cross-corpus embeddings
+    span_embedding    — vector embedding tied to a span + method
+    embedding         — legacy vector embedding tied to a unit + method
 """
 
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    BigInteger, DateTime, ForeignKey, Index, Integer, Text, JSON,
+    BigInteger, DateTime, Float, ForeignKey, Index, Integer, Text, JSON,
     UniqueConstraint, func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -127,6 +130,7 @@ class CorpusVersion(Base):
     corpus: Mapped["Corpus"]        = relationship(back_populates="versions")
     source_ref: Mapped["SourceRef"] = relationship(back_populates="corpus_versions")
     units:  Mapped[list["Unit"]]    = relationship(back_populates="corpus_version")
+    embedding_spans: Mapped[list["EmbeddingSpan"]] = relationship(back_populates="corpus_version")
 
     __table_args__ = (
         Index("ix_corpus_version_source_id", "source_id"),
@@ -193,6 +197,7 @@ class Unit(Base):
     parent:         Mapped["Unit|None"]      = relationship(back_populates="children", remote_side="Unit.id")
     children:       Mapped[list["Unit"]]     = relationship(back_populates="parent")
     embeddings:     Mapped[list["Embedding"]] = relationship(back_populates="unit")
+    span_links:      Mapped[list["EmbeddingSpanUnit"]] = relationship(back_populates="unit")
 
     __table_args__ = (
         Index("ix_unit_corpus_height",   "corpus_id", "height"),
@@ -220,6 +225,7 @@ class Method(Base):
     extra_metadata: Mapped[dict|None] = mapped_column("extra_metadata", JSON)
 
     embeddings: Mapped[list["Embedding"]] = relationship(back_populates="method")
+    span_embeddings: Mapped[list["SpanEmbedding"]] = relationship(back_populates="method")
 
     __table_args__ = (
         UniqueConstraint("model_name", "label", name="uq_method_model_label"),
@@ -242,4 +248,114 @@ class Embedding(Base):
         UniqueConstraint("unit_id", "method_id", name="uq_embedding_unit_method"),
         Index("ix_embedding_unit",   "unit_id"),
         Index("ix_embedding_method", "method_id"),
+    )
+
+
+class EmbeddingProfile(Base):
+    """
+    Segmentation profile used to derive normalized embedding spans.
+    Example labels: window-50, window-100, window-200, window-500, window-1000.
+    """
+    __tablename__ = "embedding_profile"
+
+    id:             Mapped[int]      = mapped_column(Integer, primary_key=True)
+    label:          Mapped[str]      = mapped_column(Text, nullable=False, unique=True)
+    target_tokens:  Mapped[int]      = mapped_column(Integer, nullable=False)
+    overlap_tokens: Mapped[int]      = mapped_column(Integer, nullable=False)
+    min_tokens:     Mapped[int]      = mapped_column(Integer, nullable=False)
+    max_tokens:     Mapped[int]      = mapped_column(Integer, nullable=False)
+    model_name:     Mapped[str]      = mapped_column(Text, nullable=False)
+    created_at:     Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    extra_metadata: Mapped[dict|None] = mapped_column("extra_metadata", JSON)
+
+    spans: Mapped[list["EmbeddingSpan"]] = relationship(back_populates="profile")
+
+    __table_args__ = (
+        Index("ix_embedding_profile_target_tokens", "target_tokens"),
+    )
+
+
+class EmbeddingSpan(Base):
+    """
+    Derived text span for embedding. A span may cover part of one unit, exactly one
+    unit, or several adjacent tiny units inside a coherent structural boundary.
+    """
+    __tablename__ = "embedding_span"
+
+    id:                Mapped[int]      = mapped_column(BigInteger, primary_key=True)
+    corpus_version_id: Mapped[int]      = mapped_column(Integer, ForeignKey("corpus_version.id"), nullable=False)
+    corpus_id:         Mapped[int]      = mapped_column(Integer, ForeignKey("corpus.id"), nullable=False)
+    profile_id:        Mapped[int]      = mapped_column(Integer, ForeignKey("embedding_profile.id"), nullable=False)
+
+    text:        Mapped[str] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    word_count:  Mapped[int] = mapped_column(Integer, nullable=False)
+    char_count:  Mapped[int] = mapped_column(Integer, nullable=False)
+
+    start_unit_id:     Mapped[int]      = mapped_column(BigInteger, ForeignKey("unit.id"), nullable=False)
+    end_unit_id:       Mapped[int]      = mapped_column(BigInteger, ForeignKey("unit.id"), nullable=False)
+    start_char_offset: Mapped[int|None] = mapped_column(Integer, nullable=True)
+    end_char_offset:   Mapped[int|None] = mapped_column(Integer, nullable=True)
+    reference_label:   Mapped[str|None] = mapped_column(Text)
+    ancestor_path:     Mapped[str|None] = mapped_column(Text)
+    created_at:        Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    extra_metadata:    Mapped[dict|None] = mapped_column("extra_metadata", JSON)
+
+    corpus_version: Mapped["CorpusVersion"] = relationship(back_populates="embedding_spans")
+    corpus:         Mapped["Corpus"]        = relationship()
+    profile:        Mapped["EmbeddingProfile"] = relationship(back_populates="spans")
+    start_unit:     Mapped["Unit"]          = relationship(foreign_keys=[start_unit_id])
+    end_unit:       Mapped["Unit"]          = relationship(foreign_keys=[end_unit_id])
+    unit_links:     Mapped[list["EmbeddingSpanUnit"]] = relationship(back_populates="span")
+    embeddings:     Mapped[list["SpanEmbedding"]] = relationship(back_populates="span")
+
+    __table_args__ = (
+        Index("ix_embedding_span_profile", "profile_id"),
+        Index("ix_embedding_span_corpus_profile", "corpus_id", "profile_id"),
+        Index("ix_embedding_span_version_profile", "corpus_version_id", "profile_id"),
+        Index("ix_embedding_span_start_unit", "start_unit_id"),
+        Index("ix_embedding_span_end_unit", "end_unit_id"),
+    )
+
+
+class EmbeddingSpanUnit(Base):
+    """Bridge from a derived embedding span back to the canonical units it covers."""
+    __tablename__ = "embedding_span_unit"
+
+    span_id:            Mapped[int]        = mapped_column(BigInteger, ForeignKey("embedding_span.id"), primary_key=True)
+    unit_id:            Mapped[int]        = mapped_column(BigInteger, ForeignKey("unit.id"), primary_key=True)
+    unit_order:         Mapped[int]        = mapped_column(Integer, nullable=False)
+    char_start_in_unit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    char_end_in_unit:   Mapped[int | None] = mapped_column(Integer, nullable=True)
+    coverage_weight:    Mapped[float]      = mapped_column(Float, nullable=False)
+
+    span: Mapped["EmbeddingSpan"] = relationship(back_populates="unit_links")
+    unit: Mapped["Unit"] = relationship(back_populates="span_links")
+
+    __table_args__ = (
+        Index("ix_embedding_span_unit_unit", "unit_id"),
+        Index("ix_embedding_span_unit_span_order", "span_id", "unit_order"),
+    )
+
+
+class SpanEmbedding(Base):
+    """Vector embedding for a normalized embedding span."""
+    __tablename__ = "span_embedding"
+
+    id:                Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    embedding_span_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("embedding_span.id"), nullable=False)
+    method_id:         Mapped[int] = mapped_column(Integer, ForeignKey("method.id"), nullable=False)
+    vector:            Mapped[list[float]] = mapped_column(Vector, nullable=False)
+
+    span:   Mapped["EmbeddingSpan"] = relationship(back_populates="embeddings")
+    method: Mapped["Method"] = relationship(back_populates="span_embeddings")
+
+    __table_args__ = (
+        UniqueConstraint("embedding_span_id", "method_id", name="uq_span_embedding_span_method"),
+        Index("ix_span_embedding_span", "embedding_span_id"),
+        Index("ix_span_embedding_method", "method_id"),
     )

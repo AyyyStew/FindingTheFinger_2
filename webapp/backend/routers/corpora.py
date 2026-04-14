@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from db.models import Corpus, CorpusLevel, CorpusVersion, CorpusToTaxonomy, Taxonomy, Method, Unit
+from db.models import Corpus, CorpusLevel, CorpusVersion, CorpusToTaxonomy, EmbeddingProfile, Taxonomy, Method, Unit
 from ..deps import get_db
 from ..schemas import (
     CorpusInfo,
     CorpusLevelInfo,
     CorpusVersionInfo,
+    EmbeddingProfileInfo,
     MethodInfo,
     TaxonomyLabel,
     UnitBrief,
@@ -97,6 +98,23 @@ def list_methods(db: Session = Depends(get_db)):
             vector_dim=m.vector_dim,
         )
         for m in methods
+    ]
+
+
+@router.get("/embedding-profiles", response_model=list[EmbeddingProfileInfo])
+def list_embedding_profiles(db: Session = Depends(get_db)):
+    profiles = db.execute(select(EmbeddingProfile).order_by(EmbeddingProfile.target_tokens)).scalars().all()
+    return [
+        EmbeddingProfileInfo(
+            id=p.id,
+            label=p.label,
+            target_tokens=p.target_tokens,
+            overlap_tokens=p.overlap_tokens,
+            min_tokens=p.min_tokens,
+            max_tokens=p.max_tokens,
+            model_name=p.model_name,
+        )
+        for p in profiles
     ]
 
 

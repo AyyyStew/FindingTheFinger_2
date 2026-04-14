@@ -4,7 +4,18 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session, aliased
 from sqlalchemy import func, or_, select
 
-from db.models import Corpus, CorpusVersion, Embedding, Method, SourceRef, Unit
+from db.models import (
+    Corpus,
+    CorpusVersion,
+    Embedding,
+    EmbeddingProfile,
+    EmbeddingSpan,
+    EmbeddingSpanUnit,
+    Method,
+    SourceRef,
+    SpanEmbedding,
+    Unit,
+)
 from ..deps import get_db
 from ..schemas import (
     CompareItem,
@@ -40,10 +51,23 @@ def _row_to_brief(
 
 
 def _default_method_id(db: Session) -> int:
-    method = db.execute(select(Method)).scalars().first()
+    method = db.execute(
+        select(Method).where(Method.label == "nomic-embed-text-v1.5/span-windows")
+    ).scalars().first()
+    if method is None:
+        method = db.execute(select(Method)).scalars().first()
     if method is None:
         raise HTTPException(status_code=503, detail="No embedding methods in database")
     return method.id
+
+
+def _default_profile_id(db: Session) -> int | None:
+    profile = db.execute(
+        select(EmbeddingProfile).where(EmbeddingProfile.target_tokens == 200)
+    ).scalars().first()
+    if profile is None:
+        profile = db.execute(select(EmbeddingProfile).order_by(EmbeddingProfile.target_tokens)).scalars().first()
+    return profile.id if profile is not None else None
 
 
 def _fetch_unit_brief(db: Session, unit_id: int) -> UnitBrief:
@@ -60,7 +84,48 @@ def _fetch_unit_brief(db: Session, unit_id: int) -> UnitBrief:
     return _row_to_brief(unit, corpus_name, version_name, tax_map.get(unit.corpus_id, []))
 
 
-def _fetch_embedding(db: Session, unit_id: int, method_id: int):
+def _normalize_vector(values: list[float]) -> list[float]:
+    norm = math.sqrt(sum(v * v for v in values))
+    if norm == 0:
+        return values
+    return [v / norm for v in values]
+
+
+def _weighted_average(vectors: list[tuple[list[float], float]]) -> list[float] | None:
+    if not vectors:
+        return None
+    dim = len(vectors[0][0])
+    totals = [0.0] * dim
+    weight_sum = 0.0
+    for vector, weight in vectors:
+        w = weight if weight > 0 else 1.0
+        weight_sum += w
+        for i, value in enumerate(vector):
+            totals[i] += float(value) * w
+    if weight_sum == 0:
+        return None
+    return _normalize_vector([value / weight_sum for value in totals])
+
+
+def _fetch_span_embedding(db: Session, unit_id: int, method_id: int, profile_id: int | None) -> list[float] | None:
+    if profile_id is None:
+        return None
+    rows = db.execute(
+        select(SpanEmbedding.vector, EmbeddingSpanUnit.coverage_weight)
+        .join(EmbeddingSpan, EmbeddingSpan.id == SpanEmbedding.embedding_span_id)
+        .join(EmbeddingSpanUnit, EmbeddingSpanUnit.span_id == EmbeddingSpan.id)
+        .where(SpanEmbedding.method_id == method_id)
+        .where(EmbeddingSpan.profile_id == profile_id)
+        .where(EmbeddingSpanUnit.unit_id == unit_id)
+    ).all()
+    return _weighted_average([(list(vector), float(weight)) for vector, weight in rows])
+
+
+def _fetch_embedding(db: Session, unit_id: int, method_id: int, profile_id: int | None = None):
+    span_vector = _fetch_span_embedding(db, unit_id, method_id, profile_id)
+    if span_vector is not None:
+        return span_vector
+
     vector = db.execute(
         select(Embedding.vector)
         .where(Embedding.unit_id == unit_id)
@@ -299,33 +364,54 @@ def get_unit_detail(unit_id: int, db: Session = Depends(get_db)):
 @router.post("/compare", response_model=CompareResponse)
 def compare_units(req: CompareRequest, db: Session = Depends(get_db)):
     method_id = req.method_id or _default_method_id(db)
+    profile_id = req.embedding_profile_id if req.embedding_profile_id is not None else _default_profile_id(db)
     reference_unit = _fetch_unit_brief(db, req.reference_unit_id)
-    reference_vector = list(_fetch_embedding(db, req.reference_unit_id, method_id))
+    reference_vector = list(_fetch_embedding(db, req.reference_unit_id, method_id, profile_id))
 
     if not req.unit_ids:
-        return CompareResponse(reference_unit=reference_unit, method_id=method_id, items=[])
+        return CompareResponse(reference_unit=reference_unit, method_id=method_id, embedding_profile_id=profile_id, items=[])
 
     tax_map = build_corpus_taxonomy_map(db)
-    rows = db.execute(
-        select(Unit, Corpus.name, CorpusVersion.translation_name, Embedding.vector)
-        .join(Embedding, Embedding.unit_id == Unit.id)
+    unit_rows = db.execute(
+        select(Unit, Corpus.name, CorpusVersion.translation_name)
         .join(Corpus, Corpus.id == Unit.corpus_id)
         .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
-        .where(Embedding.method_id == method_id)
         .where(Unit.id.in_(req.unit_ids))
     ).all()
 
     unit_map = {
         unit.id: (
             _row_to_brief(unit, corpus_name, version_name, tax_map.get(unit.corpus_id, [])),
-            vector,
+            _fetch_span_embedding(db, unit.id, method_id, profile_id),
         )
-        for unit, corpus_name, version_name, vector in rows
+        for unit, corpus_name, version_name in unit_rows
+    }
+
+    missing_span_ids = [unit_id for unit_id, (_, vector) in unit_map.items() if vector is None]
+    if missing_span_ids:
+        rows = db.execute(
+            select(Unit, Corpus.name, CorpusVersion.translation_name, Embedding.vector)
+            .join(Embedding, Embedding.unit_id == Unit.id)
+            .join(Corpus, Corpus.id == Unit.corpus_id)
+            .join(CorpusVersion, CorpusVersion.id == Unit.corpus_version_id)
+            .where(Embedding.method_id == method_id)
+            .where(Unit.id.in_(missing_span_ids))
+        ).all()
+        for unit, corpus_name, version_name, vector in rows:
+            unit_map[unit.id] = (
+                _row_to_brief(unit, corpus_name, version_name, tax_map.get(unit.corpus_id, [])),
+                list(vector),
+            )
+
+    typed_unit_map = {
+        unit_id: (unit, vector)
+        for unit_id, (unit, vector) in unit_map.items()
+        if vector is not None
     }
 
     items: list[CompareItem] = []
     for unit_id in req.unit_ids:
-        entry = unit_map.get(unit_id)
+        entry = typed_unit_map.get(unit_id)
         if entry is None:
             continue
         unit, vector = entry
@@ -339,4 +425,4 @@ def compare_units(req: CompareRequest, db: Session = Depends(get_db)):
             )
         )
 
-    return CompareResponse(reference_unit=reference_unit, method_id=method_id, items=items)
+    return CompareResponse(reference_unit=reference_unit, method_id=method_id, embedding_profile_id=profile_id, items=items)

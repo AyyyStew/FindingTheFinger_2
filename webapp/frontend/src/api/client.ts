@@ -1,5 +1,6 @@
 import type {
   CorpusInfo,
+  EmbeddingProfileInfo,
   KeywordSearchRequest,
   MethodInfo,
   PassageSearchRequest,
@@ -40,6 +41,10 @@ export function fetchCorpora(): Promise<CorpusInfo[]> {
 
 export function fetchMethods(): Promise<MethodInfo[]> {
   return get('/api/methods')
+}
+
+export function fetchEmbeddingProfiles(): Promise<EmbeddingProfileInfo[]> {
+  return get('/api/embedding-profiles')
 }
 
 export function fetchCorpusRoots(corpusId: number, corpusVersionId?: number): Promise<UnitBrief[]> {

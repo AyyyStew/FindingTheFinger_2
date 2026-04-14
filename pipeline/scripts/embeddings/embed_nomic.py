@@ -22,13 +22,13 @@ import sys
 from collections import defaultdict, deque
 
 import numpy as np
-import torch
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, "/home/alexs/Projects/WebProjects/FindingTheFinger_2")
 from db.session import get_session
 from db.models import Corpus, Embedding, Method, Unit
+from pipeline.scripts.embeddings.utils import embed_items_adaptive, select_device
 
 MODEL_NAME = "nomic-ai/nomic-embed-text-v1.5"
 VECTOR_DIM = 768
@@ -216,8 +216,6 @@ def embed_h0_h1(
     dry_run: bool,
     device: str = "cpu",
 ) -> None:
-    from sentence_transformers import SentenceTransformer
-
     done = already_embedded_ids(session, method.id)
 
     items: list[tuple[int, str]] = []
@@ -228,80 +226,23 @@ def embed_h0_h1(
         if uid not in done:
             items.append((uid, TASK_PREFIX + text))
 
-    # Longest texts first — worst-case VRAM hit up front on a cold cache,
-    # so OOM shrinks (if any) happen early rather than mid-run.
-    items.sort(key=lambda x: len(x[1]), reverse=True)
-
     h0_todo = sum(1 for u in h0_units if u.id not in done)
     h1_todo = sum(1 for uid in h1_texts if uid not in done)
-    print(f"h0+h1 to embed: {len(items)}  (h0={h0_todo}, h1={h1_todo})", file=sys.stderr)
+    print(f"h0+h1 queued: {len(items)}  (h0={h0_todo}, h1={h1_todo})", file=sys.stderr)
 
-    if dry_run or not items:
-        return
+    def add_unit_embedding(session: Session, unit_id: int, vec) -> None:
+        session.add(Embedding(unit_id=unit_id, method_id=method.id, vector=vec.tolist()))
 
-    model = SentenceTransformer(MODEL_NAME, trust_remote_code=True, device=device)
-    model.max_seq_length = 8192
-
-    unit_ids = [i for i, _ in items]
-    texts    = [t for _, t in items]
-
-    # Base number of clean batches before attempting a batch-size recovery.
-    # Doubles after each OOM (backoff), resets to base after a recovery sticks.
-    RECOVER_AFTER_BASE = 5
-
-    inserted       = 0
-    current_batch  = batch_size
-    clean_streak   = 0
-    recover_after  = RECOVER_AFTER_BASE
-    start          = 0
-
-    while start < len(texts):
-        batch_ids   = unit_ids[start : start + current_batch]
-        batch_texts = texts[start : start + current_batch]
-
-        try:
-            vecs = model.encode(
-                batch_texts,
-                batch_size=current_batch,
-                show_progress_bar=False,
-                normalize_embeddings=True,
-            )
-        except torch.OutOfMemoryError:
-            clean_streak  = 0
-            recover_after = min(recover_after * 2, 64)  # backoff, cap at 64
-            if current_batch == 1:
-                print(f"\nOOM on batch_size=1 at offset {start}, skipping item.", file=sys.stderr)
-                start += 1
-                continue
-            new_batch = max(1, current_batch // 2)
-            print(f"\nOOM — reducing batch size {current_batch} → {new_batch}"
-                  f"  (next recovery threshold: {recover_after})", file=sys.stderr)
-            current_batch = new_batch
-            torch.cuda.empty_cache()
-            continue
-
-        for uid, vec in zip(batch_ids, vecs):
-            session.add(Embedding(unit_id=uid, method_id=method.id, vector=vec.tolist()))
-        session.commit()
-        inserted     += len(batch_ids)
-        start        += current_batch
-        clean_streak += 1
-
-        # Try recovering toward the original batch size
-        if clean_streak >= recover_after and current_batch < batch_size:
-            new_batch = min(batch_size, current_batch * 2)
-            print(f"\n{recover_after} clean batches — recovering batch size {current_batch} → {new_batch}",
-                  file=sys.stderr)
-            current_batch = new_batch
-            clean_streak  = 0
-            # Recovery stuck — reset threshold back to base
-            if current_batch == batch_size:
-                recover_after = RECOVER_AFTER_BASE
-
-        print(f"  embedded {inserted}/{len(texts)}  (batch_size={current_batch})",
-              file=sys.stderr, end="\r")
-
-    print(f"\nh0+h1 done. Inserted {inserted} embeddings.", file=sys.stderr)
+    embed_items_adaptive(
+        session=session,
+        items=items,
+        model_name=MODEL_NAME,
+        batch_size=batch_size,
+        dry_run=dry_run,
+        device=device,
+        description="h0+h1",
+        add_embedding=add_unit_embedding,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -408,11 +349,7 @@ def main() -> None:
 
         method = get_or_create_method(session)
 
-        device = args.device or (
-            "cuda" if torch.cuda.is_available() else
-            "mps"  if torch.backends.mps.is_available() else
-            "cpu"
-        )
+        device = select_device(args.device)
         print(f"Device: {device}", file=sys.stderr)
 
         # Phase 1: embed h=0 and h=1 with the model

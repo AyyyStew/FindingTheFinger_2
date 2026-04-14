@@ -33,6 +33,16 @@ export interface MethodInfo {
   vector_dim: number
 }
 
+export interface EmbeddingProfileInfo {
+  id: number
+  label: string
+  target_tokens: number
+  overlap_tokens: number
+  min_tokens: number
+  max_tokens: number
+  model_name: string
+}
+
 export interface UnitBrief {
   id: number
   text: string | null
@@ -76,16 +86,20 @@ export interface SearchResult {
   height: number | null
   score: number
   taxonomy: TaxonomyLabel[]
+  embedding_span_id?: number | null
+  embedding_profile_id?: number | null
 }
 
 export interface SearchResponse {
   results: SearchResult[]
   mode: 'semantic' | 'keyword' | 'passage'
+  embedding_profile_id?: number | null
 }
 
 export interface SemanticSearchRequest {
   query: string
   method_id?: number
+  embedding_profile_id?: number
   height_min?: number
   height_max?: number
   depth_min?: number
@@ -109,6 +123,7 @@ export interface KeywordSearchRequest {
 export interface PassageSearchRequest {
   unit_id: number
   method_id?: number
+  embedding_profile_id?: number
   height_min?: number
   height_max?: number
   depth_min?: number
@@ -123,6 +138,7 @@ export interface CompareRequest {
   reference_unit_id: number
   unit_ids: number[]
   method_id?: number
+  embedding_profile_id?: number
 }
 
 export interface CompareItem {
@@ -134,5 +150,6 @@ export interface CompareItem {
 export interface CompareResponse {
   reference_unit: UnitBrief
   method_id: number
+  embedding_profile_id?: number | null
   items: CompareItem[]
 }
