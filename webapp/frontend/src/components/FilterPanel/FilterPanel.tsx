@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { CorpusInfo } from '../../api/types'
+import type { CorpusInfo, EmbeddingProfileInfo } from '../../api/types'
 import { getTaxonomyColor } from '../../utils/taxonomyColors'
 import styles from './FilterPanel.module.css'
 
@@ -8,6 +8,7 @@ export interface Filters {
   heightMin: number
   heightMax: number
   limit: number
+  embeddingProfileId?: number
 }
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
   filters: Filters
   onChange: (filters: Filters) => void
   corpora: CorpusInfo[]
+  embeddingProfiles?: EmbeddingProfileInfo[]
 }
 
 const LIMIT_OPTIONS = [10, 25, 50]
@@ -47,7 +49,11 @@ function levelAtHeight(corpus: CorpusInfo, heightMin: number, heightMax: number)
   return `${lo.name} – ${hi.name}`
 }
 
-export function FilterPanel({ open, filters, onChange, corpora }: Props) {
+function profileLabel(profile: EmbeddingProfileInfo): string {
+  return `${profile.target_tokens} tokens`
+}
+
+export function FilterPanel({ open, filters, onChange, corpora, embeddingProfiles = [] }: Props) {
   const groups = useMemo(() => {
     const map: Record<string, CorpusInfo[]> = {}
     for (const corpus of corpora) {
@@ -199,6 +205,21 @@ export function FilterPanel({ open, filters, onChange, corpora }: Props) {
               >
                 {LIMIT_OPTIONS.map((n) => (
                   <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.label}>Embedding window</label>
+              <select
+                className={styles.select}
+                value={filters.embeddingProfileId ?? ''}
+                onChange={(e) => onChange({ ...filters, embeddingProfileId: Number(e.target.value) || undefined })}
+              >
+                {embeddingProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profileLabel(profile)}
+                  </option>
                 ))}
               </select>
             </div>

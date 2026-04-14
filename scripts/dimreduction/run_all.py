@@ -3,14 +3,16 @@ scripts/dimreduction/run_all.py
 
 Runner that executes all dimensionality reduction methods under a single
 shared run_id. Each method writes to:
-    static/dimreduction/<method>/<run_id>/
+    static/dimreduction/<method>/<profile>/<run_id>/
 
 And updates its own latest pointer:
-    static/dimreduction/<method>/latest.json
+    static/dimreduction/<method>/<profile>/latest.json
 
 Usage:
     python -m scripts.dimreduction.run_all
     python -m scripts.dimreduction.run_all --methods umap pca
+    python -m scripts.dimreduction.run_all --profiles window-50 window-200
+    python -m scripts.dimreduction.run_all --profile window-50
     python -m scripts.dimreduction.run_all --skip phate isomap
     python -m scripts.dimreduction.run_all --run-id 2026-01-01_120000
 """
@@ -21,6 +23,7 @@ import traceback
 from datetime import datetime
 
 ALL_METHODS = ["umap", "pca", "phate", "isomap"]
+ALL_PROFILES = ["window-50", "window-100", "window-200", "window-500", "window-1000"]
 
 
 def parse_args():
@@ -33,16 +36,21 @@ def parse_args():
                    help="Skip these methods")
     p.add_argument("--save-encoder", action="store_true",
                    help="Pass --save-encoder to compute scripts (default: off)")
+    p.add_argument("--profiles", nargs="+", choices=ALL_PROFILES, default=None,
+                   help="Run only these embedding profiles (default: all)")
+    p.add_argument("--profile", action="append", choices=ALL_PROFILES, default=None,
+                   help="Run one embedding profile; repeatable legacy alias for --profiles")
     p.add_argument("--output-dir", default="static/dimreduction")
     return p.parse_args()
 
 
-def _import_and_run(method: str, run_id: str, output_dir: str, save_encoder: bool) -> None:
+def _import_and_run(method: str, run_id: str, output_dir: str, save_encoder: bool, profile: str) -> None:
     """Import the compute_<method> module and call main(run_id)."""
     # Patch sys.argv so each module's parse_args() sees --output-dir.
     old_argv = sys.argv
     sys.argv = [f"scripts.dimreduction.compute_{method}",
-                "--output-dir", output_dir]
+                "--output-dir", output_dir,
+                "--profile", profile]
     if save_encoder:
         sys.argv.append("--save-encoder")
     try:
@@ -68,30 +76,34 @@ def main() -> None:
     methods = args.methods or ALL_METHODS
     if args.skip:
         methods = [m for m in methods if m not in args.skip]
+    profiles = args.profiles or args.profile or ALL_PROFILES
 
     print(f"Run ID : {run_id}")
     print(f"Methods: {', '.join(methods)}")
+    print(f"Profiles: {', '.join(profiles)}")
     print(f"Output : {args.output_dir}")
 
     results: dict[str, str] = {}
 
-    for method in methods:
-        sep = "=" * 60
-        print(f"\n{sep}")
-        print(f"  {method.upper()}")
-        print(f"{sep}")
-        try:
-            _import_and_run(method, run_id, args.output_dir, args.save_encoder)
-            results[method] = "OK"
-        except Exception:
-            traceback.print_exc()
-            results[method] = "FAILED"
+    for profile in profiles:
+        for method in methods:
+            result_key = f"{profile}/{method}"
+            sep = "=" * 60
+            print(f"\n{sep}")
+            print(f"  {method.upper()}  {profile}")
+            print(f"{sep}")
+            try:
+                _import_and_run(method, run_id, args.output_dir, args.save_encoder, profile)
+                results[result_key] = "OK"
+            except Exception:
+                traceback.print_exc()
+                results[result_key] = "FAILED"
 
     print("\n" + "=" * 60)
     print("Summary")
     print("=" * 60)
-    for method, status in results.items():
-        print(f"  {method:<12} {status}")
+    for key, status in results.items():
+        print(f"  {key:<24} {status}")
     print(f"\nRun ID: {run_id}")
 
     if any(s == "FAILED" for s in results.values()):

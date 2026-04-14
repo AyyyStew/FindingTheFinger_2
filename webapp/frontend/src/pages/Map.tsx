@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { compareUnits, fetchCorpora, fetchUnit } from "../api/client";
+import { compareUnits, fetchCorpora, fetchEmbeddingProfiles, fetchUnit } from "../api/client";
 import type { CompareResponse, SearchResult } from "../api/types";
 import {
   MapCanvas,
@@ -20,11 +20,12 @@ import { useProjectionData } from "../hooks/useProjectionData";
 import {
   buildUnitCorpusMap,
   buildUnitPositionMap,
+  buildSpanPositionMap,
   buildVisibleCorpusIds,
+  buildVisibleCorpusVersionIds,
   buildVisibleUnitIds,
   normalizeVisibilityForData,
   visibleDepthRange as getVisibleDepthRange,
-  visibleHeightRange as getVisibleHeightRange,
 } from "../utils/mapData";
 import {
   buildCorpusColorMap,
@@ -43,7 +44,6 @@ import {
   type ProjectionMethod,
   type StandardRunData,
   type PcaManifest,
-  type LeafLayerData,
 } from "../utils/projectionLoader";
 import styles from "./Map.module.css";
 
@@ -100,13 +100,36 @@ export function Map() {
   const [yPc, setYPc] = useState(1);
   const [zPc, setZPc] = useState(2);
 
-  const { data: projData, loading, message, error } = useProjectionData(method);
-
   const { data: corpora = [] } = useQuery({
     queryKey: ["corpora"],
     queryFn: fetchCorpora,
     staleTime: Infinity,
   });
+
+  const { data: embeddingProfiles = [] } = useQuery({
+    queryKey: ["embedding-profiles"],
+    queryFn: fetchEmbeddingProfiles,
+    staleTime: Infinity,
+  });
+
+  const [selectedEmbeddingProfileId, setSelectedEmbeddingProfileId] = useState<number | undefined>();
+  const selectedEmbeddingProfile = useMemo(
+    () => embeddingProfiles.find((profile) => profile.id === selectedEmbeddingProfileId),
+    [embeddingProfiles, selectedEmbeddingProfileId],
+  );
+  const selectedProjectionProfileLabel = selectedEmbeddingProfile?.label ?? "window-50";
+  const { data: projData, loading, message, error } = useProjectionData(
+    method,
+    selectedProjectionProfileLabel,
+  );
+
+  useEffect(() => {
+    if (embeddingProfiles.length === 0 || selectedEmbeddingProfileId != null) return;
+    const defaultProfile =
+      embeddingProfiles.find((profile) => profile.target_tokens === 50) ??
+      embeddingProfiles[0];
+    setSelectedEmbeddingProfileId(defaultProfile.id);
+  }, [embeddingProfiles, selectedEmbeddingProfileId]);
 
   const colorMap = useMemo(() => buildCorpusColorMap(corpora), [corpora]);
   const corpusLabelMap = useMemo(() => buildCorpusLabelMap(corpora), [corpora]);
@@ -160,25 +183,6 @@ export function Map() {
     staleTime: Infinity,
   });
 
-  const firstLeafUnitId = useMemo(() => {
-    if (!hover || hover.height <= 0 || !resolvedData) return null;
-    const leafLayer = resolvedData.layers.get(0);
-    if (!leafLayer || leafLayer.height !== 0) return null;
-    const leaf = leafLayer as LeafLayerData;
-    const ancestorIdx = hover.height - 1;
-    if (ancestorIdx >= leaf.ancestors.length) return null;
-    const ancestorCol = leaf.ancestors[ancestorIdx];
-    const idx = ancestorCol.findIndex((id) => id === hover.unitId);
-    return idx >= 0 ? leaf.unitIds[idx] : null;
-  }, [hover, resolvedData]);
-
-  const { data: firstLeafUnit } = useQuery({
-    queryKey: ["unit", firstLeafUnitId],
-    queryFn: () => fetchUnit(firstLeafUnitId!),
-    enabled: firstLeafUnitId != null,
-    staleTime: Infinity,
-  });
-
   // ── Search result highlighting ─────────────────────────────────────────────
 
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(
@@ -215,6 +219,28 @@ export function Map() {
     [resolvedData],
   );
 
+  const spanPositionMap = useMemo(
+    () =>
+      resolvedData
+        ? buildSpanPositionMap(resolvedData)
+        : new globalThis.Map<number, [number, number, number]>(),
+    [resolvedData],
+  );
+
+  const getResultPosition = useCallback(
+    (result: SearchResult): [number, number, number] | undefined => {
+      if (result.result_type === "span") {
+        const spanId = result.embedding_span_id ?? result.id;
+        const spanPos = spanPositionMap.get(spanId);
+        if (spanPos) return spanPos;
+        const anchorId = result.primary_unit_id ?? result.start_unit_id ?? result.support_unit_ids?.[0];
+        return anchorId == null ? undefined : unitPositionMap.get(anchorId);
+      }
+      return unitPositionMap.get(result.id);
+    },
+    [spanPositionMap, unitPositionMap],
+  );
+
   /**
    * Unit IDs that are currently visible on the map — i.e. in an enabled
    * layer AND in a visible corpus. Search results are filtered to this set.
@@ -229,17 +255,15 @@ export function Map() {
     return buildVisibleCorpusIds(corpora, resolvedVisibility);
   }, [corpora, resolvedVisibility]);
 
-  const visibleHeightRange = useMemo(() => {
-    if (!resolvedData || !resolvedVisibility) return { min: null, max: null };
-    return getVisibleHeightRange(resolvedData, resolvedVisibility);
+  const visibleCorpusVersionIds = useMemo(() => {
+    if (!resolvedData || !resolvedVisibility) return null;
+    return buildVisibleCorpusVersionIds(resolvedData, resolvedVisibility);
   }, [resolvedData, resolvedVisibility]);
 
   const visibleDepthRange = useMemo(() => {
     if (!resolvedData || !resolvedVisibility) return { min: null, max: null };
     return getVisibleDepthRange(resolvedData, resolvedVisibility);
   }, [resolvedData, resolvedVisibility]);
-
-  const searchScatterMode = resolvedVisibility?.scatterMode ?? "corpusVersion";
 
   /**
    * Positions for the constellation. Index 0 = hub (anchor for passage mode,
@@ -254,11 +278,11 @@ export function Map() {
       if (ap) positions.push(ap);
     }
     for (const r of searchResults) {
-      const p = unitPositionMap.get(r.id);
+      const p = getResultPosition(r);
       if (p) positions.push(p);
     }
     return positions.length > 0 ? positions : null;
-  }, [searchResults, anchorUnitId, unitPositionMap]);
+  }, [searchResults, anchorUnitId, unitPositionMap, getResultPosition]);
 
   const visibleResultPositions =
     rightPanelTab === "search" ? resultPositions : null;
@@ -309,13 +333,16 @@ export function Map() {
       setAnchorUnitId(anchor ?? null);
       // Fly to anchor (passage mode) or first result.
       const flyTarget =
-        anchor ?? results.find((r) => unitPositionMap.has(r.id))?.id;
+        anchor ?? results.find((r) => getResultPosition(r) != null);
       if (flyTarget != null) {
-        const pos = unitPositionMap.get(flyTarget);
+        const pos =
+          typeof flyTarget === "number"
+            ? unitPositionMap.get(flyTarget)
+            : getResultPosition(flyTarget);
         if (pos) setFlyTo(flyToPoint(pos[0], pos[1], pos[2]));
       }
     },
-    [unitPositionMap],
+    [getResultPosition, unitPositionMap],
   );
 
   const [highlightPos, setHighlightPos] = useState<
@@ -368,13 +395,13 @@ export function Map() {
         setHighlightPos(null);
         return;
       }
-      const pos = unitPositionMap.get(result.id);
+      const pos = getResultPosition(result);
       if (pos) {
         setHighlightPos(pos);
         setFlyTo(flyToPoint(pos[0], pos[1], pos[2]));
       }
     },
-    [unitPositionMap],
+    [getResultPosition],
   );
 
   useEffect(() => {
@@ -398,6 +425,7 @@ export function Map() {
     compareUnits({
       reference_unit_id: referenceUnitId,
       unit_ids: compareSelectionIds,
+      embedding_profile_id: selectedEmbeddingProfileId,
     })
       .then((response) => {
         if (cancelled) return;
@@ -415,7 +443,7 @@ export function Map() {
     return () => {
       cancelled = true;
     };
-  }, [compareReferenceId, compareSelectionIds]);
+  }, [compareReferenceId, compareSelectionIds, selectedEmbeddingProfileId]);
 
   const handleReferenceChange = useCallback((unitId: number) => {
     setCompareReferenceId(unitId);
@@ -711,20 +739,6 @@ export function Map() {
                   >
                     {hoveredUnit ? (
                       <UnitCard unit={hoveredUnit} variant="micro">
-                        {hover.height > 0 && firstLeafUnit && (
-                          <div className={styles.leafPreview}>
-                            {firstLeafUnit.reference_label && (
-                              <div className={styles.leafRef}>
-                                {firstLeafUnit.reference_label}
-                              </div>
-                            )}
-                            {firstLeafUnit.text && (
-                              <div className={styles.leafText}>
-                                {firstLeafUnit.text}
-                              </div>
-                            )}
-                          </div>
-                        )}
                       </UnitCard>
                     ) : (
                       <div className={styles.tooltipSkeleton}>
@@ -775,11 +789,12 @@ export function Map() {
               <MapSearchPanel
                 ref={searchPanelRef}
                 corpora={corpora}
-                scatterMode={searchScatterMode}
+                embeddingProfiles={embeddingProfiles}
+                selectedEmbeddingProfileId={selectedEmbeddingProfileId}
+                onEmbeddingProfileChange={setSelectedEmbeddingProfileId}
                 visibleUnitIds={visibleUnitIds}
                 visibleCorpusIds={visibleCorpusIds}
-                visibleHeightMin={visibleHeightRange.min}
-                visibleHeightMax={visibleHeightRange.max}
+                visibleCorpusVersionIds={visibleCorpusVersionIds}
                 visibleDepthMin={visibleDepthRange.min}
                 visibleDepthMax={visibleDepthRange.max}
                 onResults={handleSearchResults}

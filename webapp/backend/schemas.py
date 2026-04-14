@@ -3,7 +3,7 @@ webapp/backend/schemas.py
 
 Pydantic models for request/response bodies.
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +123,7 @@ class CompareResponse(BaseModel):
 
 class SearchResult(BaseModel):
     id: int
+    result_type: str  # "unit" | "span"
     text: str | None
     reference_label: str | None
     ancestor_path: str | None
@@ -133,6 +134,10 @@ class SearchResult(BaseModel):
     taxonomy: list[TaxonomyLabel]  # full ancestor chain, for color-coding
     embedding_span_id: int | None = None
     embedding_profile_id: int | None = None
+    support_unit_ids: list[int] = Field(default_factory=list)
+    start_unit_id: int | None = None
+    end_unit_id: int | None = None
+    primary_unit_id: int | None = None
 
 
 class SearchResponse(BaseModel):
@@ -150,6 +155,7 @@ class SemanticSearchRequest(BaseModel):
     depth_min: int | None = None
     depth_max: int | None = None
     corpus_ids: list[int] | None = None
+    corpus_version_ids: list[int] | None = None
     limit: int = 10
     offset: int = 0
 
@@ -161,6 +167,7 @@ class KeywordSearchRequest(BaseModel):
     depth_min: int | None = None
     depth_max: int | None = None
     corpus_ids: list[int] | None = None
+    corpus_version_ids: list[int] | None = None
     limit: int = 10
     offset: int = 0
 
@@ -174,6 +181,7 @@ class PassageSearchRequest(BaseModel):
     depth_min: int | None = None
     depth_max: int | None = None
     corpus_ids: list[int] | None = None
+    corpus_version_ids: list[int] | None = None
     limit: int = 10
     offset: int = 0
     exclude_self: bool = True

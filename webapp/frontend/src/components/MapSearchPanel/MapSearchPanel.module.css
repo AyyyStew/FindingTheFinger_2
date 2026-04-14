@@ -36,6 +36,24 @@
   width: 100%;
 }
 
+.profileField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.profileLabel {
+  composes: sectionLabel from '../../styles/primitives.module.css';
+  font-size: var(--text-caption);
+}
+
+.profileSelect {
+  composes: inputField from '../../styles/primitives.module.css';
+  min-height: var(--control-height-sm);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
 .textarea {
   composes: inputField from '../../styles/primitives.module.css';
   min-height: var(--textarea-min-panel);

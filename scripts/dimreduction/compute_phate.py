@@ -21,9 +21,9 @@ import numpy as np
 
 from .shared import (
     DEFAULT_OUTPUT_DIR, DEFAULT_SAMPLE_PER_DIV,
-    aggregate_parents, compute_corpus_seqs, compute_leaf_ancestors,
-    get_session, load_embeddings, load_unit_labels, load_unit_tree,
-    print_unassigned, sample_by_division, write_method_output,
+    aggregate_parents, fold_span_positions_to_units, get_session, load_span_embeddings,
+    load_unit_labels, load_unit_tree, sample_spans_by_division,
+    write_method_output,
 )
 
 METHOD_NAME   = "phate"
@@ -39,6 +39,7 @@ def parse_args():
     p.add_argument("--decay",               type=int,   default=DEFAULT_DECAY)
     p.add_argument("--sample-per-division", type=int,   default=DEFAULT_SAMPLE_PER_DIV)
     p.add_argument("--no-sample",           action="store_true")
+    p.add_argument("--profile",             default="window-50")
     p.add_argument("--save-encoder",        action="store_true",
                    help="Save fitted encoder.pkl (default: off)")
     p.add_argument("--output-dir",          default=DEFAULT_OUTPUT_DIR)
@@ -89,27 +90,23 @@ def main(run_id: str | None = None) -> None:
         max_height = max(height_of.values()) if height_of else 0
         print(f"  max height: {max_height}")
 
-        unit_ids, matrix = load_embeddings(session)
+        span_ids, matrix, span_meta, profile = load_span_embeddings(session, args.profile)
 
         if args.no_sample:
             sample_indices = None
         else:
-            sample_indices, unassigned_ids = sample_by_division(
-                unit_ids, args.sample_per_division, parent_of, depth_of
+            sample_indices, unassigned_ids = sample_spans_by_division(
+                span_ids, span_meta, args.sample_per_division, parent_of, depth_of
             )
             if unassigned_ids:
-                print_unassigned(session, unassigned_ids)
+                print(f"  Warning: {len(unassigned_ids):,} spans skipped from sample")
 
         phate_op, coords = run_phate(matrix, args.knn, args.decay, sample_indices)
+        span_positions = {span_id: coords[i] for i, span_id in enumerate(span_ids)}
+        unit_ids, unit_coords = fold_span_positions_to_units(session, span_ids, coords)
 
         print("Aggregating parent positions...")
-        positions = aggregate_parents(unit_ids, coords, children_of, parent_of)
-
-        print("Computing corpus sequences...")
-        corpus_seqs = compute_corpus_seqs(unit_ids, corpus_id_of)
-
-        print(f"Computing leaf ancestors (heights 1–{max_height})...")
-        leaf_ancestors = compute_leaf_ancestors(unit_ids, parent_of, height_of, max_height)
+        positions = aggregate_parents(unit_ids, unit_coords, children_of, parent_of)
 
         non_leaf_ids = [uid for uid in positions if height_of.get(uid, 0) > 0]
         print(f"Loading labels for {len(non_leaf_ids):,} non-leaf units...")
@@ -126,19 +123,18 @@ def main(run_id: str | None = None) -> None:
             "sampled": sample_indices is not None,
         },
         positions       = positions,
-        height_of       = height_of,
         depth_of        = depth_of,
         corpus_id_of    = corpus_id_of,
         corpus_version_id_of = corpus_version_id_of,
-        corpus_seqs     = corpus_seqs,
-        leaf_ancestors  = leaf_ancestors,
         unit_labels     = unit_labels,
-        max_height      = max_height,
         n_components    = 3,
+        span_positions  = span_positions,
+        span_meta       = span_meta,
+        profile         = profile,
     )
 
     if args.save_encoder:
-        encoder_path = output_dir / METHOD_NAME / run_id / "encoder.pkl"
+        encoder_path = output_dir / METHOD_NAME / profile.label / run_id / "encoder.pkl"
         joblib.dump(phate_op, encoder_path)
         print(f"  encoder.pkl  saved")
     else:

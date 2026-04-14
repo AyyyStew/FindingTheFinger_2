@@ -78,6 +78,7 @@ export interface UnitDetail {
 
 export interface SearchResult {
   id: number
+  result_type: 'unit' | 'span'
   text: string | null
   reference_label: string | null
   ancestor_path: string | null
@@ -88,6 +89,10 @@ export interface SearchResult {
   taxonomy: TaxonomyLabel[]
   embedding_span_id?: number | null
   embedding_profile_id?: number | null
+  support_unit_ids: number[]
+  start_unit_id?: number | null
+  end_unit_id?: number | null
+  primary_unit_id?: number | null
 }
 
 export interface SearchResponse {
@@ -105,6 +110,7 @@ export interface SemanticSearchRequest {
   depth_min?: number
   depth_max?: number
   corpus_ids?: number[]
+  corpus_version_ids?: number[]
   limit?: number
   offset?: number
 }
@@ -116,6 +122,7 @@ export interface KeywordSearchRequest {
   depth_min?: number
   depth_max?: number
   corpus_ids?: number[]
+  corpus_version_ids?: number[]
   limit?: number
   offset?: number
 }
@@ -129,6 +136,7 @@ export interface PassageSearchRequest {
   depth_min?: number
   depth_max?: number
   corpus_ids?: number[]
+  corpus_version_ids?: number[]
   limit?: number
   offset?: number
   exclude_self?: boolean

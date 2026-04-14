@@ -18,7 +18,7 @@ import type { CorpusInfo } from "../api/types";
 import { getTaxonomyColor } from "./taxonomyColors";
 import type {
   CorpusVersionLayerData,
-  HeightLayerData,
+  SpanLayerData,
   StandardRunData,
 } from "./projectionLoader";
 
@@ -27,12 +27,10 @@ import type {
 // Designed to extend: add 'cloud', 'voronoi', 'labels' keys without breaking callers.
 
 export interface MapVisibility {
-  /** Whether scatter points are grouped by height-from-leaf or by corpus version. */
-  scatterMode: "height" | "corpusVersion";
-  /** height → visible. Leaves (h=0) on by default. */
-  scatter: Record<number, boolean>;
   /** corpus_version_id → visible. All versions on by default. */
   scatterCorpusVersion: Record<number, boolean>;
+  /** Span window layer visibility. */
+  spans: boolean;
   /** corpus_id → visible. Absent key means visible. Empty object = all visible. */
   corpora: Record<number, boolean>;
   /** corpus_version_id → visible. Absent key means visible. Empty object = all visible. */
@@ -57,18 +55,12 @@ export const DEFAULT_OVERLAY_OPTIONS: MapOverlayOptions = {
   kdeBreakdown: "overall",
 };
 
-export function defaultVisibility(
-  heights: number[],
-  corpusVersionIds: number[],
-): MapVisibility {
-  const scatter: Record<number, boolean> = {};
-  for (const h of heights) scatter[h] = h === 0; // leaves on by default
+export function defaultVisibility(corpusVersionIds: number[]): MapVisibility {
   const scatterCorpusVersion: Record<number, boolean> = {};
   for (const cvid of corpusVersionIds) scatterCorpusVersion[cvid] = true;
   return {
-    scatterMode: "corpusVersion",
-    scatter,
     scatterCorpusVersion,
+    spans: true,
     corpora: {},
     corpusVersions: {},
   };
@@ -202,79 +194,6 @@ const MIN_POINT_RADIUS_PX = 5;
 const HIGHLIGHT_RADIUS_PX = 6;
 
 /**
- * One ScatterplotLayer per visible height level.
- * Higher heights get larger radii so they remain visible behind leaves.
- */
-export function buildScatterLayers(
-  data: StandardRunData,
-  visibility: MapVisibility,
-  colorMap: CorpusColorMap,
-  selectedUnitIds: Set<number> | null = null,
-): Layer[] {
-  const hiddenCorpora = new Set(
-    Object.entries(visibility.corpora)
-      .filter(([, v]) => !v)
-      .map(([k]) => Number(k)),
-  );
-  const hiddenVersions = new Set(
-    Object.entries(visibility.corpusVersions)
-      .filter(([, v]) => !v)
-      .map(([k]) => Number(k)),
-  );
-  return data.manifest.heights
-    .filter((h) => visibility.scatter[h] !== false)
-    .map((h) => {
-      const layer = data.layers.get(h)!;
-      // Leaves: small + semi-transparent so density is visible.
-      // Parents: larger, more opaque — rendered on top via layer order.
-      const alpha = h === 0 ? 180 : 230;
-      const radius = h === 0 ? 3 : 4 + h * 3;
-      const { fillColors, lineColors } = buildPointStyleArrays(
-        layer,
-        colorMap,
-        alpha,
-        hiddenCorpora,
-        hiddenVersions,
-        selectedUnitIds,
-        layer.unitIds,
-      );
-
-      return new ScatterplotLayer({
-        id: `scatter-h${h}`,
-        // deck.gl v8 binary attribute API: typed arrays go in data.attributes
-        data: {
-          length: layer.count,
-          attributes: {
-            getPosition: { value: layer.positions, size: 3 },
-            getFillColor: { value: fillColors, size: 4 },
-            getLineColor: { value: lineColors, size: 4 },
-          },
-        },
-        getRadius: radius,
-        radiusUnits: "pixels",
-        radiusMinPixels: MIN_POINT_RADIUS_PX,
-        billboard: true,
-        pickable: true,
-        stroked: true,
-        lineWidthUnits: "pixels",
-        lineWidthMinPixels: 1,
-        parameters: { depthTest: false },
-        updateTriggers: {
-          getFillColor: [
-            colorMap.size,
-            alpha,
-            visibility.corpora,
-            visibility.corpusVersions,
-            selectedUnitIds?.size ?? 0,
-          ],
-        },
-      });
-    });
-}
-
-// ── Corpus-version scatter layer builder ─────────────────────────────────────
-
-/**
  * One ScatterplotLayer per visible corpus version.
  */
 export function buildCorpusVersionScatterLayers(
@@ -342,6 +261,54 @@ export function buildCorpusVersionScatterLayers(
       });
     })
     .filter((l): l is ScatterplotLayer => l !== null);
+}
+
+export function buildSpanScatterLayer(
+  data: StandardRunData,
+  visibility: MapVisibility,
+  colorMap: CorpusColorMap,
+): Layer | null {
+  const layer = data.spanLayer as SpanLayerData | null;
+  if (!layer || visibility.spans === false) return null;
+  const hiddenCorpora = hiddenCorpusSet(visibility);
+  const hiddenVersions = hiddenVersionSet(visibility);
+  const fillColors = new Uint8Array(layer.count * 4);
+  const lineColors = new Uint8Array(layer.count * 4);
+  for (let i = 0; i < layer.count; i++) {
+    const corpusId = layer.corpusIds[i];
+    const corpusVersionId = layer.corpusVersionIds[i];
+    const hidden =
+      hiddenCorpora.has(corpusId) || hiddenVersions.has(corpusVersionId);
+    const [r, g, b] = colorMap.get(corpusId) ?? [126, 126, 126];
+    fillColors[i * 4] = r;
+    fillColors[i * 4 + 1] = g;
+    fillColors[i * 4 + 2] = b;
+    fillColors[i * 4 + 3] = hidden ? 0 : 95;
+    lineColors[i * 4] = 245;
+    lineColors[i * 4 + 1] = 237;
+    lineColors[i * 4 + 2] = 208;
+    lineColors[i * 4 + 3] = hidden ? 0 : 190;
+  }
+  return new ScatterplotLayer({
+    id: "scatter-spans",
+    data: {
+      length: layer.count,
+      attributes: {
+        getPosition: { value: layer.positions, size: 3 },
+        getFillColor: { value: fillColors, size: 4 },
+        getLineColor: { value: lineColors, size: 4 },
+      },
+    },
+    getRadius: 2.6,
+    radiusUnits: "pixels",
+    radiusMinPixels: 4,
+    billboard: true,
+    pickable: true,
+    stroked: true,
+    lineWidthUnits: "pixels",
+    lineWidthMinPixels: 1,
+    parameters: { depthTest: false },
+  });
 }
 
 // ── Highlight + constellation layers (search results) ────────────────────────
@@ -555,27 +522,6 @@ function visiblePointLayers(
   data: StandardRunData,
   visibility: MapVisibility,
 ): VisiblePointLayer[] {
-  if (visibility.scatterMode === "height") {
-    return data.manifest.heights
-      .filter((h) => visibility.scatter[h] !== false)
-      .map((h) => {
-        const layer = data.layers.get(h) as HeightLayerData | undefined;
-        return layer
-          ? {
-              id: `h${h}`,
-              level: h,
-              label: `height ${h}`,
-              count: layer.count,
-              unitIds: layer.unitIds,
-              positions: layer.positions,
-              corpusIds: layer.corpusIds,
-              corpusVersionIds: layer.corpusVersionIds,
-            }
-          : null;
-      })
-      .filter((layer): layer is VisiblePointLayer => layer !== null);
-  }
-
   return data.manifest.corpus_version_ids
     .filter((cvid) => visibility.scatterCorpusVersion[cvid] !== false)
     .map((cvid) => {
@@ -658,29 +604,6 @@ function kdeBoundsBox(data: StandardRunData): [number, number, number, number] {
   ];
 }
 
-function buildVoronoiPointFilter(
-  data: StandardRunData,
-): (unitId: number, corpusId: number) => boolean {
-  const leafLayer = data.layers.get(0);
-  if (!leafLayer) return () => true;
-
-  const leafUnitIds = new Set<number>();
-  for (let i = 0; i < leafLayer.count; i++) {
-    leafUnitIds.add(leafLayer.unitIds[i]);
-  }
-
-  const corpusHasNonLeaf = new Set<number>();
-  for (const [height, layer] of data.layers) {
-    if (height <= 0) continue;
-    for (let i = 0; i < layer.count; i++) {
-      corpusHasNonLeaf.add(layer.corpusIds[i]);
-    }
-  }
-
-  return (unitId, corpusId) =>
-    !leafUnitIds.has(unitId) || !corpusHasNonLeaf.has(corpusId);
-}
-
 export function buildVoronoiLayers(
   data: StandardRunData,
   visibility: MapVisibility,
@@ -693,7 +616,6 @@ export function buildVoronoiLayers(
   const cacheKey = [
     "voronoi-v2",
     dataCachePrefix(data),
-    visibility.scatterMode,
     pointLayersKey(layers),
     hiddenCorporaKey(hiddenCorpora),
     hiddenVersionsKey(hiddenVersions),
@@ -702,7 +624,6 @@ export function buildVoronoiLayers(
   const cached = getCached(voronoiDataCache, cacheKey);
   if (cached) return cached.map(voronoiDatumToLayer);
 
-  const includeVoronoiPoint = buildVoronoiPointFilter(data);
   const layerData = setCached(
     voronoiDataCache,
     cacheKey,
@@ -712,7 +633,6 @@ export function buildVoronoiLayers(
           layer,
           hiddenCorpora,
           hiddenVersions,
-          includeVoronoiPoint,
         );
         if (points.length < 2) return null;
         const delaunay = Delaunay.from(
@@ -738,7 +658,7 @@ export function buildVoronoiLayers(
 
         if (cellData.length === 0) return null;
         return {
-          id: `voronoi-${visibility.scatterMode}-${layer.id}`,
+          id: `voronoi-${layer.id}`,
           cellData,
           lineWidth: layerIndex === 0 ? 1.2 : 0.7,
         };
@@ -837,7 +757,6 @@ export function buildKdeCloudLayers(
   const cacheKey = [
     "kde-v2",
     dataCachePrefix(data),
-    visibility.scatterMode,
     breakdown,
     pointLayersKey(layers),
     breakdown === "corpus" ? "all-corpora" : hiddenCorporaKey(hiddenCorpora),
@@ -1101,10 +1020,8 @@ export function buildAllLayers(
   overlays: MapOverlayOptions = DEFAULT_OVERLAY_OPTIONS,
   enablePlanarDerivedOverlays = true,
 ): Layer[] {
-  const scatterLayers =
-    visibility.scatterMode === "corpusVersion"
-      ? buildCorpusVersionScatterLayers(data, visibility, colorMap, selectedUnitIds)
-      : buildScatterLayers(data, visibility, colorMap, selectedUnitIds);
+  const scatterLayers = buildCorpusVersionScatterLayers(data, visibility, colorMap, selectedUnitIds);
+  const spanLayer = buildSpanScatterLayer(data, visibility, colorMap);
   return [
     ...(enablePlanarDerivedOverlays && overlays.kde
       ? buildKdeCloudLayers(data, visibility, colorMap, overlays.kdeBreakdown)
@@ -1113,6 +1030,7 @@ export function buildAllLayers(
       ? buildVoronoiLayers(data, visibility, colorMap)
       : []),
     ...(overlays.hidePoints ? [] : scatterLayers),
+    ...(overlays.hidePoints || !spanLayer ? [] : [spanLayer]),
     ...(overlays.labels
       ? buildLabelLayers(
           data,

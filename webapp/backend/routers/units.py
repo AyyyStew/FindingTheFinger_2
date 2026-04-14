@@ -63,7 +63,7 @@ def _default_method_id(db: Session) -> int:
 
 def _default_profile_id(db: Session) -> int | None:
     profile = db.execute(
-        select(EmbeddingProfile).where(EmbeddingProfile.target_tokens == 200)
+        select(EmbeddingProfile).where(EmbeddingProfile.target_tokens == 50)
     ).scalars().first()
     if profile is None:
         profile = db.execute(select(EmbeddingProfile).order_by(EmbeddingProfile.target_tokens)).scalars().first()

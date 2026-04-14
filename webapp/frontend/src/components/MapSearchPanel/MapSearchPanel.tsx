@@ -1,7 +1,7 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchUnit, searchKeyword, searchPassage, searchSemantic } from '../../api/client';
-import type { CorpusInfo, SearchResult, UnitBrief } from '../../api/types';
+import type { CorpusInfo, EmbeddingProfileInfo, SearchResult, UnitBrief } from '../../api/types';
 import {
   SEARCH_MODE_BADGES,
   SEARCH_MODE_LABELS,
@@ -58,6 +58,10 @@ function ScoreChip({ score }: ScoreChipProps) {
   return <span className={`${styles.score} ${cls}`}>{Math.round(score * 100)}%</span>;
 }
 
+function resultReadUnitId(result: SearchResult): number {
+  return result.primary_unit_id ?? result.start_unit_id ?? result.support_unit_ids?.[0] ?? result.id;
+}
+
 interface ResultRowProps {
   result: SearchResult;
   showScore: boolean;
@@ -70,7 +74,7 @@ interface ResultRowProps {
 
 function ResultRow({ result, showScore, rank, expanded, onToggleExpand, onHover, onFindSimilar }: ResultRowProps) {
   const { solid, dim } = getTaxonomyColor(result.taxonomy);
-  const label = result.reference_label ?? `Unit ${result.id}`;
+  const label = result.reference_label ?? (result.result_type === 'span' ? `Span ${result.id}` : `Unit ${result.id}`);
   const hasText = Boolean(result.text);
 
   return (
@@ -111,7 +115,7 @@ function ResultRow({ result, showScore, rank, expanded, onToggleExpand, onHover,
           >
             ∿ Find Similar
           </button>
-          <Link className={styles.readLinkBtn} to={`/read/${result.id}`}>
+          <Link className={styles.readLinkBtn} to={`/read/${resultReadUnitId(result)}`}>
             Read
           </Link>
         </div>
@@ -122,8 +126,7 @@ function ResultRow({ result, showScore, rank, expanded, onToggleExpand, onHover,
 
 interface SearchFilters {
   corpus_ids?: number[];
-  height_min?: number;
-  height_max?: number;
+  corpus_version_ids?: number[];
   depth_min?: number;
   depth_max?: number;
 }
@@ -146,13 +149,14 @@ export interface MapSearchPanelHandle {
 
 export interface MapSearchPanelProps {
   corpora: CorpusInfo[];
-  scatterMode: 'height' | 'corpusVersion';
+  embeddingProfiles: EmbeddingProfileInfo[];
+  selectedEmbeddingProfileId?: number;
+  onEmbeddingProfileChange: (profileId: number) => void;
   /** Exact unit IDs currently visible on the map. */
   visibleUnitIds?: globalThis.Set<number> | null;
   /** Coarse search filters derived from the layer panel visibility. */
   visibleCorpusIds?: number[] | null;
-  visibleHeightMin?: number | null;
-  visibleHeightMax?: number | null;
+  visibleCorpusVersionIds?: number[] | null;
   visibleDepthMin?: number | null;
   visibleDepthMax?: number | null;
   /**
@@ -165,11 +169,12 @@ export interface MapSearchPanelProps {
 
 export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelProps>(function MapSearchPanel({
   corpora,
-  scatterMode,
+  embeddingProfiles,
+  selectedEmbeddingProfileId,
+  onEmbeddingProfileChange,
   visibleUnitIds,
   visibleCorpusIds,
-  visibleHeightMin,
-  visibleHeightMax,
+  visibleCorpusVersionIds,
   visibleDepthMin,
   visibleDepthMax,
   onResults,
@@ -197,16 +202,21 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
   function filterToVisibleUnits(results: SearchResult[], limit = DISPLAY_LIMIT): SearchResult[] {
     if (visibleUnitIds == null) return results.slice(0, limit);
     if (visibleUnitIds.size === 0) return [];
-    return results.filter(r => visibleUnitIds.has(r.id)).slice(0, limit);
+    return results
+      .filter((r) =>
+        r.result_type === 'span'
+          ? (r.support_unit_ids ?? []).some((unitId) => visibleUnitIds.has(unitId))
+          : visibleUnitIds.has(r.id),
+      )
+      .slice(0, limit);
   }
 
   function buildSearchRequestFilters() {
     return {
       corpus_ids: visibleCorpusIds ?? undefined,
-      height_min: scatterMode === 'height' ? visibleHeightMin ?? undefined : undefined,
-      height_max: scatterMode === 'height' ? visibleHeightMax ?? undefined : undefined,
-      depth_min: scatterMode === 'corpusVersion' ? visibleDepthMin ?? undefined : undefined,
-      depth_max: scatterMode === 'corpusVersion' ? visibleDepthMax ?? undefined : undefined,
+      corpus_version_ids: visibleCorpusVersionIds ?? undefined,
+      depth_min: visibleDepthMin ?? undefined,
+      depth_max: visibleDepthMax ?? undefined,
     };
   }
 
@@ -225,11 +235,13 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
         limit,
         offset,
         exclude_self: true,
+        embedding_profile_id: selectedEmbeddingProfileId,
         ...filters,
       };
     }
     return {
       query,
+      embedding_profile_id: selectedEmbeddingProfileId,
       limit,
       offset,
       ...filters,
@@ -278,11 +290,10 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
     onResults,
     visibleUnitIds,
     visibleCorpusIds,
-    visibleHeightMin,
-    visibleHeightMax,
+    visibleCorpusVersionIds,
+    selectedEmbeddingProfileId,
     visibleDepthMin,
     visibleDepthMax,
-    scatterMode,
   ]);
 
   const canSearch =
@@ -379,7 +390,8 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
 
   const handleFindSimilar = async (result: SearchResult) => {
     // Build a UnitBrief-compatible object from the result
-    const unit: UnitBrief = { ...result, depth: 0 };
+    const unitId = resultReadUnitId(result);
+    const unit: UnitBrief = { ...result, id: unitId, depth: 0 };
     setMode('passage');
     setSelectedUnit(unit);
     setActiveResults(null);
@@ -391,15 +403,15 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
     onResults([], 'passage', '');
     setIsSearching(true);
     try {
-      const res = await searchPassage(buildSearchRequestBody('passage', '', result.id, 0, SEARCH_LIMIT));
-      const label = result.reference_label ?? `Unit ${result.id}`;
+      const res = await searchPassage(buildSearchRequestBody('passage', '', unitId, 0, SEARCH_LIMIT));
+      const label = result.reference_label ?? `Unit ${unitId}`;
       const filtered = filterToVisibleUnits(res.results);
-      commitResults(filtered, 'passage', label, result.id);
+      commitResults(filtered, 'passage', label, unitId);
       setActiveSearch({
         mode: 'passage',
         label,
-        unitId: result.id,
-        anchorUnitId: result.id,
+        unitId,
+        anchorUnitId: unitId,
         filters: buildSearchRequestFilters(),
         rawResults: res.results,
         rawOffset: res.results.length,
@@ -557,6 +569,23 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
           )}
         </div>
 
+        {embeddingProfiles.length > 0 && (
+          <label className={styles.profileField}>
+            <span className={styles.profileLabel}>Embedding window</span>
+            <select
+              className={styles.profileSelect}
+              value={selectedEmbeddingProfileId ?? ''}
+              onChange={(e) => onEmbeddingProfileChange(Number(e.target.value))}
+            >
+              {embeddingProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.target_tokens} tokens
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
         <button
           className={styles.searchBtn}
           onClick={() => void handleSearch()}
@@ -583,7 +612,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
               <div className={styles.resultList}>
                 {activeResults.map((r, i) => (
                   <ResultRow
-                    key={r.id}
+                    key={`${r.result_type}-${r.id}`}
                     result={r}
                     showScore={showScore}
                     rank={i + 1}

@@ -128,6 +128,12 @@ export function LayerPanel({
       corpusVersions: { ...visibility.corpusVersions, [id]: !isVersionVisible(id) },
     });
 
+  const toggleSpans = () =>
+    onChange({
+      ...visibility,
+      spans: !visibility.spans,
+    });
+
   const soloGroup = (groupCorpora: CorpusInfo[]) => {
     const groupIds = new Set(groupCorpora.map((c) => c.id));
     const isSolo =
@@ -172,6 +178,27 @@ export function LayerPanel({
   return (
     <aside className={styles.panel}>
       <h2 className={styles.title}>Layers</h2>
+
+      {manifest.has_span_layer && (
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.sectionLabel}>Embedding windows</span>
+          </div>
+          <div className={styles.corpusItem}>
+            <div className={styles.corpusRow}>
+              <span className={styles.corpusName}>
+                {manifest.embedding_profile?.label ?? "spans"}
+              </span>
+            </div>
+            <input
+              type="checkbox"
+              className={`${styles.check} ${styles.checkRight}`}
+              checked={visibility.spans !== false}
+              onChange={toggleSpans}
+            />
+          </div>
+        </section>
+      )}
 
       {/* ── Traditions section ── */}
       {traditionGroups.length > 0 && (

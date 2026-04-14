@@ -20,9 +20,11 @@ import {
 import styles from "./MapCanvas.module.css";
 
 export interface HoverInfo {
+  resultType: "unit" | "span";
   unitId: number;
-  /** Height of the hovered layer (-1 when in corpus-version mode). */
-  height: number;
+  spanId?: number;
+  /** Height is no longer emitted by projection layers. */
+  height: -1;
   /** Depth field is reserved for search integration (-1 when unknown). */
   depth: number;
   corpusId: number;
@@ -185,17 +187,6 @@ export function MapCanvas({
   const renderData = useMemo<StandardRunData>(() => {
     if (viewMode === "3d") return data;
 
-    const layers = new Map<
-      number,
-      typeof data.layers extends Map<number, infer T> ? T : never
-    >();
-    for (const [height, layer] of data.layers) {
-      layers.set(height, {
-        ...layer,
-        positions: flattenPositionsTo2D(layer.positions),
-      } as typeof layer);
-    }
-
     const corpusVersionLayers = new Map<
       number,
       typeof data.corpusVersionLayers extends Map<number, infer T> ? T : never
@@ -209,8 +200,13 @@ export function MapCanvas({
 
     return {
       ...data,
-      layers,
       corpusVersionLayers,
+      spanLayer: data.spanLayer
+        ? {
+            ...data.spanLayer,
+            positions: flattenPositionsTo2D(data.spanLayer.positions),
+          }
+        : null,
       bounds: {
         ...data.bounds,
         minZ: 0,
@@ -518,26 +514,28 @@ export function MapCanvas({
     (info: PickingInfo): HoverInfo | null => {
       if (!info.picked || info.index < 0) return null;
       const layerId = info.layer?.id ?? "";
-      const heightMatch = layerId.match(/^scatter-h(\d+)$/);
       const corpusVersionMatch = layerId.match(/^scatter-cv(\d+)$/);
-      if (heightMatch) {
-        const height = parseInt(heightMatch[1], 10);
-        const layer = data.layers.get(height);
+      const spanMatch = layerId === "scatter-spans";
+      if (corpusVersionMatch) {
+        const corpusVersionId = parseInt(corpusVersionMatch[1], 10);
+        const layer = data.corpusVersionLayers.get(corpusVersionId);
         if (!layer) return null;
         return {
+          resultType: "unit",
           unitId: layer.unitIds[info.index],
-          height,
+          height: -1,
           depth: -1,
           corpusId: layer.corpusIds[info.index],
           screenX: info.x,
           screenY: info.y,
         };
-      } else if (corpusVersionMatch) {
-        const corpusVersionId = parseInt(corpusVersionMatch[1], 10);
-        const layer = data.corpusVersionLayers.get(corpusVersionId);
+      } else if (spanMatch) {
+        const layer = data.spanLayer;
         if (!layer) return null;
         return {
-          unitId: layer.unitIds[info.index],
+          resultType: "span",
+          spanId: layer.spanIds[info.index],
+          unitId: layer.primaryUnitIds[info.index],
           height: -1,
           depth: -1,
           corpusId: layer.corpusIds[info.index],

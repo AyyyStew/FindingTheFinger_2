@@ -41,7 +41,7 @@ def _default_method_id(db: Session) -> int:
 
 def _default_profile_id(db: Session) -> int | None:
     profile = db.execute(
-        select(EmbeddingProfile).where(EmbeddingProfile.target_tokens == 200)
+        select(EmbeddingProfile).where(EmbeddingProfile.target_tokens == 50)
     ).scalars().first()
     if profile is None:
         profile = db.execute(select(EmbeddingProfile).order_by(EmbeddingProfile.target_tokens)).scalars().first()
@@ -106,6 +106,20 @@ def _unit_embedding_vector(db: Session, unit_id: int, method_id: int) -> list[fl
     return list(vector) if vector is not None else None
 
 
+def _span_support_unit_ids(db: Session, span_ids: list[int]) -> dict[int, list[int]]:
+    if not span_ids:
+        return {}
+    rows = db.execute(
+        select(EmbeddingSpanUnit.span_id, EmbeddingSpanUnit.unit_id)
+        .where(EmbeddingSpanUnit.span_id.in_(span_ids))
+        .order_by(EmbeddingSpanUnit.span_id, EmbeddingSpanUnit.unit_order)
+    ).all()
+    support: dict[int, list[int]] = {}
+    for span_id, unit_id in rows:
+        support.setdefault(span_id, []).append(unit_id)
+    return support
+
+
 def _span_vector_search(
     db: Session,
     query_vec: list[float],
@@ -116,12 +130,15 @@ def _span_vector_search(
     depth_min: int | None,
     depth_max: int | None,
     corpus_ids: list[int] | None,
+    corpus_version_ids: list[int] | None,
     limit: int,
     tax_map: dict[int, list[TaxonomyLabel]],
     exclude_unit_id: int | None = None,
     offset: int = 0,
 ) -> list[SearchResult]:
     if corpus_ids is not None and len(corpus_ids) == 0:
+        return []
+    if corpus_version_ids is not None and len(corpus_version_ids) == 0:
         return []
 
     stmt = (
@@ -139,12 +156,13 @@ def _span_vector_search(
         .where(SpanEmbedding.method_id == method_id)
         .where(EmbeddingSpan.profile_id == profile_id)
     )
-    if height_min is not None and height_max is not None:
-        stmt = stmt.where(Unit.height.between(height_min, height_max))
-    if depth_min is not None and depth_max is not None:
-        stmt = stmt.where(Unit.depth.between(depth_min, depth_max))
+    # Span search level is controlled by embedding_profile_id. Unit
+    # height/depth filters are only meaningful for unit-backed searches.
+    _ = (height_min, height_max, depth_min, depth_max)
     if corpus_ids:
         stmt = stmt.where(EmbeddingSpan.corpus_id.in_(corpus_ids))
+    if corpus_version_ids:
+        stmt = stmt.where(EmbeddingSpan.corpus_version_id.in_(corpus_version_ids))
     if exclude_unit_id is not None:
         stmt = stmt.where(
             ~select(EmbeddingSpanUnit.span_id)
@@ -155,9 +173,11 @@ def _span_vector_search(
     stmt = stmt.order_by("distance").offset(offset).limit(limit)
 
     rows = db.execute(stmt).all()
+    support_by_span = _span_support_unit_ids(db, [span.id for span, *_ in rows])
     return [
         SearchResult(
-            id=unit.id,
+            id=span.id,
+            result_type="span",
             text=span.text,
             reference_label=span.reference_label or unit.reference_label,
             ancestor_path=span.ancestor_path or unit.ancestor_path,
@@ -168,6 +188,10 @@ def _span_vector_search(
             taxonomy=tax_map.get(span.corpus_id, []),
             embedding_span_id=span.id,
             embedding_profile_id=profile_id,
+            support_unit_ids=support_by_span.get(span.id, [span.start_unit_id]),
+            start_unit_id=span.start_unit_id,
+            end_unit_id=span.end_unit_id,
+            primary_unit_id=span.start_unit_id,
         )
         for span, unit, corpus_name, version_name, distance in rows
     ]
@@ -182,12 +206,15 @@ def _vector_search(
     depth_min: int | None,
     depth_max: int | None,
     corpus_ids: list[int] | None,
+    corpus_version_ids: list[int] | None,
     limit: int,
     tax_map: dict[int, list[TaxonomyLabel]],
     exclude_unit_id: int | None = None,
     offset: int = 0,
 ) -> list[SearchResult]:
     if corpus_ids is not None and len(corpus_ids) == 0:
+        return []
+    if corpus_version_ids is not None and len(corpus_version_ids) == 0:
         return []
 
     stmt = (
@@ -208,6 +235,8 @@ def _vector_search(
         stmt = stmt.where(Unit.depth.between(depth_min, depth_max))
     if corpus_ids:
         stmt = stmt.where(Unit.corpus_id.in_(corpus_ids))
+    if corpus_version_ids:
+        stmt = stmt.where(Unit.corpus_version_id.in_(corpus_version_ids))
     if exclude_unit_id is not None:
         stmt = stmt.where(Unit.id != exclude_unit_id)
     stmt = stmt.order_by("distance").offset(offset).limit(limit)
@@ -216,6 +245,7 @@ def _vector_search(
     return [
         SearchResult(
             id=unit.id,
+            result_type="unit",
             text=unit.text,
             reference_label=unit.reference_label,
             ancestor_path=unit.ancestor_path,
@@ -226,6 +256,10 @@ def _vector_search(
             taxonomy=tax_map.get(unit.corpus_id, []),
             embedding_span_id=None,
             embedding_profile_id=None,
+            support_unit_ids=[unit.id],
+            start_unit_id=unit.id,
+            end_unit_id=unit.id,
+            primary_unit_id=unit.id,
         )
         for unit, corpus_name, version_name, distance in rows
     ]
@@ -240,12 +274,13 @@ def search_semantic(req: SemanticSearchRequest, db: Session = Depends(get_db)):
     if _has_span_embeddings(db, method_id, profile_id):
         results = _span_vector_search(
             db, query_vec, method_id, profile_id, req.height_min, req.height_max,
-            req.depth_min, req.depth_max, req.corpus_ids, req.limit, tax_map, offset=req.offset,
+            req.depth_min, req.depth_max, req.corpus_ids, req.corpus_version_ids,
+            req.limit, tax_map, offset=req.offset,
         )
         return SearchResponse(results=results, mode="semantic", embedding_profile_id=profile_id)
     results = _vector_search(
         db, query_vec, method_id, req.height_min, req.height_max, req.depth_min, req.depth_max,
-        req.corpus_ids, req.limit, tax_map, offset=req.offset,
+        req.corpus_ids, req.corpus_version_ids, req.limit, tax_map, offset=req.offset,
     )
     return SearchResponse(results=results, mode="semantic", embedding_profile_id=None)
 
@@ -254,6 +289,8 @@ def search_semantic(req: SemanticSearchRequest, db: Session = Depends(get_db)):
 def search_keyword(req: KeywordSearchRequest, db: Session = Depends(get_db)):
     tax_map = build_corpus_taxonomy_map(db)
     if req.corpus_ids is not None and len(req.corpus_ids) == 0:
+        return SearchResponse(results=[], mode="keyword")
+    if req.corpus_version_ids is not None and len(req.corpus_version_ids) == 0:
         return SearchResponse(results=[], mode="keyword")
     stmt = (
         select(Unit, Corpus.name, CorpusVersion.translation_name)
@@ -274,6 +311,8 @@ def search_keyword(req: KeywordSearchRequest, db: Session = Depends(get_db)):
         stmt = stmt.where(Unit.depth.between(req.depth_min, req.depth_max))
     if req.corpus_ids:
         stmt = stmt.where(Unit.corpus_id.in_(req.corpus_ids))
+    if req.corpus_version_ids:
+        stmt = stmt.where(Unit.corpus_version_id.in_(req.corpus_version_ids))
     stmt = stmt.offset(req.offset).limit(req.limit)
 
     rows = db.execute(stmt).all()
@@ -281,6 +320,7 @@ def search_keyword(req: KeywordSearchRequest, db: Session = Depends(get_db)):
         results=[
             SearchResult(
                 id=unit.id,
+                result_type="unit",
                 text=unit.text,
                 reference_label=unit.reference_label,
                 ancestor_path=unit.ancestor_path,
@@ -291,6 +331,10 @@ def search_keyword(req: KeywordSearchRequest, db: Session = Depends(get_db)):
                 taxonomy=tax_map.get(unit.corpus_id, []),
                 embedding_span_id=None,
                 embedding_profile_id=None,
+                support_unit_ids=[unit.id],
+                start_unit_id=unit.id,
+                end_unit_id=unit.id,
+                primary_unit_id=unit.id,
             )
             for unit, corpus_name, version_name in rows
         ],
@@ -318,11 +362,13 @@ def search_passage(req: PassageSearchRequest, db: Session = Depends(get_db)):
     if _has_span_embeddings(db, method_id, profile_id):
         results = _span_vector_search(
             db, list(vector), method_id, profile_id, req.height_min, req.height_max,
-            req.depth_min, req.depth_max, req.corpus_ids, req.limit, tax_map, exclude_id, offset=req.offset,
+            req.depth_min, req.depth_max, req.corpus_ids, req.corpus_version_ids,
+            req.limit, tax_map, exclude_id, offset=req.offset,
         )
         return SearchResponse(results=results, mode="passage", embedding_profile_id=profile_id)
     results = _vector_search(
         db, list(vector), method_id, req.height_min, req.height_max,
-        req.depth_min, req.depth_max, req.corpus_ids, req.limit, tax_map, exclude_id, offset=req.offset,
+        req.depth_min, req.depth_max, req.corpus_ids, req.corpus_version_ids,
+        req.limit, tax_map, exclude_id, offset=req.offset,
     )
     return SearchResponse(results=results, mode="passage", embedding_profile_id=None)

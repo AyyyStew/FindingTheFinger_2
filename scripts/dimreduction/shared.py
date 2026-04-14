@@ -5,29 +5,6 @@ Shared data loading, sampling, aggregation, and binary I/O utilities
 used by all dimensionality reduction scripts.
 
 Binary format (columnar, little-endian):
-    height_0.bin:
-        [N: uint32]
-        [unit_ids:      N × int32]
-        [component_0:   N × float32]   ← x (or PC1)
-        [component_1:   N × float32]   ← y (or PC2)
-        …
-        [component_K-1: N × float32]
-        [corpus_ids:    N × int32]
-        [corpus_version_ids: N × int32]
-        [corpus_seqs:   N × int32]
-        [ancestor_h1:   N × int32]
-        …
-        [ancestor_hH:   N × int32]
-
-    height_N.bin (N > 0):
-        [N: uint32]
-        [unit_ids:      N × int32]
-        [component_0:   N × float32]
-        …
-        [component_K-1: N × float32]
-        [corpus_ids:    N × int32]
-        [corpus_version_ids: N × int32]
-
     corpus_version_<id>.bin:
         [N: uint32]
         [unit_ids:      N × int32]
@@ -55,13 +32,36 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from db.models import Corpus, Embedding, Method, Unit
+from db.models import (
+    Corpus,
+    Embedding,
+    EmbeddingProfile,
+    EmbeddingSpan,
+    EmbeddingSpanUnit,
+    Method,
+    SpanEmbedding,
+    Unit,
+)
 from db.session import get_session  # noqa: F401 — re-exported for convenience
 
-METHOD_LABEL        = "nomic-embed-text-v1.5/all-heights"
+METHOD_LABEL        = "nomic-embed-text-v1.5/span-windows"
+LEGACY_METHOD_LABEL = "nomic-embed-text-v1.5/all-heights"
+DEFAULT_PROFILE_LABEL = "window-50"
 DEFAULT_OUTPUT_DIR  = "static/dimreduction"
 DEFAULT_SAMPLE_PER_DIV = 100
 RANDOM_STATE        = 42
+POSTGRES_IN_BATCH_SIZE = 10_000
+
+
+def _vector_to_list(value) -> list[float]:
+    if isinstance(value, str):
+        return [float(x) for x in value.strip("[]").split(",")]
+    return list(value)
+
+
+def _chunks(values: list[int], size: int):
+    for start in range(0, len(values), size):
+        yield values[start:start + size]
 
 
 # ---------------------------------------------------------------------------
@@ -119,36 +119,113 @@ def load_unit_tree(session: Session):
 
 def load_embeddings(session: Session) -> tuple[list[int], np.ndarray]:
     """
-    Load all height=0 unit embeddings for the configured model.
+    Load all height=0 unit embeddings for the legacy configured model.
     Returns (unit_ids, float32 matrix). Ordered by corpus_id, unit id.
     """
-    print("Loading embeddings from DB...")
+    print("Loading legacy unit embeddings from DB...")
     rows = session.execute(
         select(Unit.id, Embedding.vector)
         .join(Embedding, Embedding.unit_id == Unit.id)
         .join(Method, Method.id == Embedding.method_id)
-        .where(Method.label == METHOD_LABEL)
+        .where(Method.label == LEGACY_METHOD_LABEL)
         .where(Unit.height == 0)
         .order_by(Unit.corpus_id, Unit.id)
     ).all()
 
     if not rows:
         raise SystemExit(
-            f"No embeddings found for model '{METHOD_LABEL}'. "
+            f"No embeddings found for model '{LEGACY_METHOD_LABEL}'. "
             "Run the embed script first."
         )
 
     unit_ids = [r[0] for r in rows]
     vectors  = []
     for r in rows:
-        v = r[1]
-        if isinstance(v, str):
-            v = [float(x) for x in v.strip("[]").split(",")]
-        vectors.append(v)
+        vectors.append(_vector_to_list(r[1]))
 
     matrix = np.array(vectors, dtype=np.float32)
     print(f"  {len(unit_ids):,} units  |  shape: {matrix.shape}")
     return unit_ids, matrix
+
+
+def resolve_embedding_profile(session: Session, profile_label: str) -> EmbeddingProfile:
+    profile = session.execute(
+        select(EmbeddingProfile).where(EmbeddingProfile.label == profile_label)
+    ).scalar_one_or_none()
+    if profile is None and profile_label == DEFAULT_PROFILE_LABEL:
+        profile = session.execute(
+            select(EmbeddingProfile)
+            .where(EmbeddingProfile.target_tokens == 50)
+            .order_by(EmbeddingProfile.id)
+        ).scalars().first()
+    if profile is None:
+        profile = session.execute(
+            select(EmbeddingProfile).order_by(EmbeddingProfile.target_tokens)
+        ).scalars().first()
+    if profile is None:
+        raise SystemExit("No embedding profiles found. Run build_embedding_spans.py first.")
+    return profile
+
+
+def load_span_embeddings(
+    session: Session,
+    profile_label: str = DEFAULT_PROFILE_LABEL,
+) -> tuple[list[int], np.ndarray, dict[int, dict[str, Any]], EmbeddingProfile]:
+    """
+    Load span embeddings for one embedding profile.
+    Returns (span_ids, matrix, span_meta, profile). Ordered by corpus_id, span id.
+    """
+    profile = resolve_embedding_profile(session, profile_label)
+    print(f"Loading span embeddings from DB for profile '{profile.label}'...")
+    rows = session.execute(
+        select(
+            EmbeddingSpan.id,
+            SpanEmbedding.vector,
+            EmbeddingSpan.corpus_id,
+            EmbeddingSpan.corpus_version_id,
+            EmbeddingSpan.start_unit_id,
+            EmbeddingSpan.end_unit_id,
+            EmbeddingSpan.token_count,
+            EmbeddingSpan.reference_label,
+        )
+        .join(SpanEmbedding, SpanEmbedding.embedding_span_id == EmbeddingSpan.id)
+        .join(Method, Method.id == SpanEmbedding.method_id)
+        .where(Method.label == METHOD_LABEL)
+        .where(EmbeddingSpan.profile_id == profile.id)
+        .order_by(EmbeddingSpan.corpus_id, EmbeddingSpan.id)
+    ).all()
+
+    if not rows:
+        raise SystemExit(
+            f"No span embeddings found for method '{METHOD_LABEL}' and profile "
+            f"'{profile.label}'. Run embed_span_nomic.py first."
+        )
+
+    span_ids = [r[0] for r in rows]
+    matrix = np.array([_vector_to_list(r[1]) for r in rows], dtype=np.float32)
+    span_meta = {
+        span_id: {
+            "corpus_id": corpus_id,
+            "corpus_version_id": corpus_version_id,
+            "start_unit_id": start_unit_id,
+            "end_unit_id": end_unit_id,
+            "primary_unit_id": start_unit_id,
+            "token_count": token_count,
+            "reference_label": reference_label,
+        }
+        for (
+            span_id,
+            _vector,
+            corpus_id,
+            corpus_version_id,
+            start_unit_id,
+            end_unit_id,
+            token_count,
+            reference_label,
+        ) in rows
+    }
+    print(f"  {len(span_ids):,} spans  |  shape: {matrix.shape}")
+    return span_ids, matrix, span_meta, profile
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +269,40 @@ def sample_by_division(
     sampled_arr = np.array(sorted(set(sampled)), dtype=np.int64)
     print(f"  {len(div_to_indices):,} divisions  →  {len(sampled_arr):,} sample leaves"
           f"  (out of {len(unit_ids):,} total)")
+    return sampled_arr, unassigned_ids
+
+
+def sample_spans_by_division(
+    span_ids: list[int],
+    span_meta: dict[int, dict[str, Any]],
+    n_per_division: int,
+    parent_of: dict[int, int],
+    depth_of: dict[int, int],
+) -> tuple[np.ndarray, list[int]]:
+    print(f"\nBuilding balanced span sample ({n_per_division} spans per depth=0 division)...")
+    div_to_indices: dict[int, list[int]] = defaultdict(list)
+    unassigned_ids: list[int] = []
+
+    for idx, span_id in enumerate(span_ids):
+        anchor_id = span_meta[span_id]["primary_unit_id"]
+        div_id = _find_depth0_ancestor(anchor_id, parent_of, depth_of)
+        if div_id is None:
+            unassigned_ids.append(span_id)
+            continue
+        div_to_indices[div_id].append(idx)
+
+    if unassigned_ids:
+        print(f"  Warning: {len(unassigned_ids):,} spans had no depth=0 anchor ancestor (skipped from sample)")
+
+    rng = np.random.default_rng(RANDOM_STATE)
+    sampled: list[int] = []
+    for indices in div_to_indices.values():
+        k = min(n_per_division, len(indices))
+        sampled.extend(rng.choice(indices, size=k, replace=False).tolist())
+
+    sampled_arr = np.array(sorted(set(sampled)), dtype=np.int64)
+    print(f"  {len(div_to_indices):,} divisions  →  {len(sampled_arr):,} sample spans"
+          f"  (out of {len(span_ids):,} total)")
     return sampled_arr, unassigned_ids
 
 
@@ -285,6 +396,50 @@ def aggregate_parents(
     return positions
 
 
+def fold_span_positions_to_units(
+    session: Session,
+    span_ids: list[int],
+    span_coords: np.ndarray,
+) -> tuple[list[int], np.ndarray]:
+    """
+    Fold projected span coordinates back onto covered leaf units using
+    embedding_span_unit.coverage_weight.
+    """
+    print("Folding span positions back onto units...")
+    idx_by_span = {span_id: i for i, span_id in enumerate(span_ids)}
+    totals: dict[int, np.ndarray] = {}
+    weights: dict[int, float] = {}
+    n_batches = (len(span_ids) + POSTGRES_IN_BATCH_SIZE - 1) // POSTGRES_IN_BATCH_SIZE
+    for batch_index, batch in enumerate(_chunks(span_ids, POSTGRES_IN_BATCH_SIZE), start=1):
+        rows = session.execute(
+            select(
+                EmbeddingSpanUnit.span_id,
+                EmbeddingSpanUnit.unit_id,
+                EmbeddingSpanUnit.coverage_weight,
+            )
+            .where(EmbeddingSpanUnit.span_id.in_(batch))
+            .order_by(EmbeddingSpanUnit.unit_id, EmbeddingSpanUnit.span_id)
+        ).all()
+        for span_id, unit_id, weight in rows:
+            idx = idx_by_span.get(span_id)
+            if idx is None:
+                continue
+            w = float(weight) if weight and weight > 0 else 1.0
+            totals[unit_id] = totals.get(unit_id, np.zeros(span_coords.shape[1], dtype=np.float32)) + span_coords[idx] * w
+            weights[unit_id] = weights.get(unit_id, 0.0) + w
+        if n_batches > 1:
+            print(f"  loaded span-unit link batch {batch_index}/{n_batches}", end="\r")
+    if n_batches > 1:
+        print()
+
+    unit_ids = sorted(totals)
+    if not unit_ids:
+        raise SystemExit("No span-to-unit links found for projected spans.")
+    unit_coords = np.array([totals[uid] / max(weights[uid], 1e-12) for uid in unit_ids], dtype=np.float32)
+    print(f"  {len(span_ids):,} spans → {len(unit_ids):,} covered units")
+    return unit_ids, unit_coords
+
+
 def compute_leaf_ancestors(
     leaf_ids: list[int],
     parent_of: dict[int, int],
@@ -322,69 +477,32 @@ def write_method_output(
     method_name: str,
     manifest_extra: dict[str, Any],
     positions: dict[int, np.ndarray],
-    height_of: dict[int, int],
     depth_of: dict[int, int],
     corpus_id_of: dict[int, int],
     corpus_version_id_of: dict[int, int],
-    corpus_seqs: dict[int, int],
-    leaf_ancestors: dict[int, dict[int, int]],
     unit_labels: dict[int, str],
-    max_height: int,
     n_components: int = 2,
+    span_positions: dict[int, np.ndarray] | None = None,
+    span_meta: dict[int, dict[str, Any]] | None = None,
+    profile: EmbeddingProfile | None = None,
 ) -> None:
     """
     Write binary + JSON output for one method under:
         <base_output_dir>/<method_name>/<run_id>/
 
-    Writes both height_N.bin (grouped by height from leaf) and
-    corpus_version_<id>.bin (grouped by corpus_version_id) so the
-    frontend can toggle either grouping. Also writes the per-method latest pointer:
+    Writes corpus_version_<id>.bin (grouped by corpus_version_id),
+    optional spans.bin, labels, manifest, and the per-method latest pointer:
         <base_output_dir>/<method_name>/latest.json
     """
-    method_dir = base_output_dir / method_name / run_id
+    profile_label = profile.label if profile is not None else None
+    method_root = base_output_dir / method_name
+    latest_dir = method_root
+    if profile_label is not None:
+        method_root = method_root / profile_label
+        latest_dir = method_root
+    method_dir = method_root / run_id
     method_dir.mkdir(parents=True, exist_ok=True)
     print(f"\nWriting output to {method_dir}/")
-
-    # ── Height bins ───────────────────────────────────────────────────────────
-
-    by_height: dict[int, list[int]] = defaultdict(list)
-    for uid in positions:
-        h = height_of.get(uid, 0)
-        by_height[h].append(uid)
-
-    point_counts: dict[str, int] = {}
-
-    for h in sorted(by_height.keys()):
-        uids = sorted(by_height[h])
-        ids  = np.array(uids, dtype=np.int32)
-        cids = np.array([corpus_id_of.get(u, 0) for u in uids], dtype=np.int32)
-        cvids = np.array([corpus_version_id_of.get(u, 0) for u in uids], dtype=np.int32)
-
-        cols: list[tuple[np.ndarray, str]] = [(ids, "int32")]
-
-        for k in range(n_components):
-            col = np.array([float(positions[u][k]) for u in uids], dtype=np.float32)
-            cols.append((col, "float32"))
-
-        if h == 0:
-            seqs = np.array([corpus_seqs.get(u, 0) for u in uids], dtype=np.int32)
-            cols.append((cids, "int32"))
-            cols.append((cvids, "int32"))
-            cols.append((seqs, "int32"))
-            for ah in range(1, max_height + 1):
-                anc = np.array(
-                    [leaf_ancestors.get(u, {}).get(ah, 0) for u in uids],
-                    dtype=np.int32,
-                )
-                cols.append((anc, "int32"))
-        else:
-            cols.append((cids, "int32"))
-            cols.append((cvids, "int32"))
-
-        bin_path = method_dir / f"height_{h}.bin"
-        _write_columnar_bin(bin_path, cols)
-        point_counts[str(h)] = len(uids)
-        print(f"  height_{h}.bin  {len(uids):,} points")
 
     # ── Corpus-version bins ───────────────────────────────────────────────────
     # Each corpus_version_<id>.bin contains all units in one corpus version.
@@ -419,6 +537,37 @@ def write_method_output(
         corpus_version_counts[str(cvid)] = len(uids)
         print(f"  corpus_version_{cvid}.bin   {len(uids):,} points")
 
+    # ── Span bin ──────────────────────────────────────────────────────────────
+    # Format:
+    # [N][span_ids][comp_0]...[comp_K-1][corpus_ids][corpus_version_ids]
+    # [start_unit_ids][end_unit_ids][primary_unit_ids][token_counts]
+    span_count = 0
+    if span_positions is not None and span_meta is not None:
+        span_ids = sorted(span_positions)
+        ids = np.array(span_ids, dtype=np.int32)
+        cids = np.array([span_meta[s]["corpus_id"] for s in span_ids], dtype=np.int32)
+        cvids = np.array([span_meta[s]["corpus_version_id"] for s in span_ids], dtype=np.int32)
+        start_ids = np.array([span_meta[s]["start_unit_id"] for s in span_ids], dtype=np.int32)
+        end_ids = np.array([span_meta[s]["end_unit_id"] for s in span_ids], dtype=np.int32)
+        primary_ids = np.array([span_meta[s]["primary_unit_id"] for s in span_ids], dtype=np.int32)
+        token_counts = np.array([span_meta[s]["token_count"] for s in span_ids], dtype=np.int32)
+
+        cols = [(ids, "int32")]
+        for k in range(n_components):
+            col = np.array([float(span_positions[s][k]) for s in span_ids], dtype=np.float32)
+            cols.append((col, "float32"))
+        cols.extend([
+            (cids, "int32"),
+            (cvids, "int32"),
+            (start_ids, "int32"),
+            (end_ids, "int32"),
+            (primary_ids, "int32"),
+            (token_counts, "int32"),
+        ])
+        _write_columnar_bin(method_dir / "spans.bin", cols)
+        span_count = len(span_ids)
+        print(f"  spans.bin   {span_count:,} points")
+
     # ── Labels + manifest ─────────────────────────────────────────────────────
 
     labels_path = method_dir / "unit_labels.json"
@@ -431,11 +580,23 @@ def write_method_output(
         "created_at":       datetime.now(timezone.utc).isoformat(),
         "method":           method_name,
         "embedding_method": METHOD_LABEL,
-        "bin_schema_version": 3,
+        "bin_schema_version": 5,
         "has_corpus_version_ids": True,
-        "max_height":       max_height,
-        "heights":          sorted(by_height.keys()),
-        "point_counts":     point_counts,
+        "has_span_layer": span_positions is not None,
+        "span_count": span_count,
+        "embedding_profile": (
+            {
+                "id": profile.id,
+                "label": profile.label,
+                "target_tokens": profile.target_tokens,
+                "overlap_tokens": profile.overlap_tokens,
+                "min_tokens": profile.min_tokens,
+                "max_tokens": profile.max_tokens,
+                "model_name": profile.model_name,
+            }
+            if profile is not None
+            else None
+        ),
         "max_depth":        max_depth,
         "corpus_version_ids": sorted(by_corpus_version.keys()),
         "corpus_version_counts": corpus_version_counts,
@@ -447,7 +608,6 @@ def write_method_output(
     print(f"  manifest.json")
 
     # Per-method latest pointer
-    latest_dir = base_output_dir / method_name
     latest_dir.mkdir(parents=True, exist_ok=True)
     with open(latest_dir / "latest.json", "w") as f:
         json.dump({"run_id": run_id}, f)

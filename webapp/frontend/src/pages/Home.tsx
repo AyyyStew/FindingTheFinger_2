@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   fetchCorpora,
+  fetchEmbeddingProfiles,
   searchKeyword,
   searchPassage,
   searchSemantic,
@@ -35,6 +36,12 @@ export function Home() {
     staleTime: Infinity,
   })
 
+  const { data: embeddingProfiles = [] } = useQuery({
+    queryKey: ['embedding-profiles'],
+    queryFn: fetchEmbeddingProfiles,
+    staleTime: Infinity,
+  })
+
   // Auto-select all corpora on first load
   useEffect(() => {
     if (corpora.length > 0 && !corporaInitialized.current) {
@@ -42,6 +49,13 @@ export function Home() {
       setFilters((f) => ({ ...f, corpusIds: corpora.map((c) => c.id) }))
     }
   }, [corpora])
+
+  useEffect(() => {
+    if (embeddingProfiles.length === 0 || filters.embeddingProfileId != null) return
+    const defaultProfile =
+      embeddingProfiles.find((p) => p.target_tokens === 50) ?? embeddingProfiles[0]
+    setFilters((f) => ({ ...f, embeddingProfileId: defaultProfile.id }))
+  }, [embeddingProfiles, filters.embeddingProfileId])
 
   const buildShared = (offset = 0) => {
     const corpus_ids =
@@ -52,6 +66,7 @@ export function Home() {
       height_min: filters.heightMin,
       height_max: filters.heightMax,
       corpus_ids,
+      embedding_profile_id: filters.embeddingProfileId,
       limit: filters.limit,
       offset,
     }
@@ -158,6 +173,7 @@ export function Home() {
           filters={filters}
           onChange={setFilters}
           corpora={corpora}
+          embeddingProfiles={embeddingProfiles}
         />
       </section>
 
@@ -176,7 +192,7 @@ export function Home() {
               </div>
               <div className={styles.resultList}>
                 {results.results.map((r) => (
-                  <ResultCard key={r.id} result={r} showScore={showScore} />
+                  <ResultCard key={`${r.result_type}-${r.id}`} result={r} showScore={showScore} />
                 ))}
               </div>
               {hasMore && (
