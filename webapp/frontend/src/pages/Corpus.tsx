@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { fetchCorpora } from '../api/client'
-import { getTaxonomyColor } from '../utils/taxonomyColors'
+import { getCorpusColor, getTaxonomyColor } from '../utils/taxonomyColors'
 import styles from './Corpus.module.css'
 
 function taxonomyPath(levels: { name: string; level: number }[]): string {
@@ -58,7 +58,8 @@ export function Corpus() {
         <section className={styles.groupList}>
           {grouped.map((group) => {
             const sample = group.subgroups[0]?.items[0]
-            const { solid, dim } = getTaxonomyColor(sample?.taxonomy ?? [])
+            const rootTaxonomy = sample?.taxonomy.find((t) => t.level === 0)
+            const { solid, dim } = getTaxonomyColor(rootTaxonomy ? [rootTaxonomy] : [])
             return (
               <article key={group.root} className={styles.group}>
                 <header
@@ -77,7 +78,7 @@ export function Corpus() {
                       </div>
                       <div className={styles.grid}>
                         {items.map((corpus) => {
-                          const { solid: cardSolid, dim: cardDim } = getTaxonomyColor(corpus.taxonomy)
+                          const { solid: cardSolid, dim: cardDim } = getCorpusColor(corpus.taxonomy, corpus.name)
                           const taxPath = taxonomyPath(corpus.taxonomy)
                           return (
                             <Link

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Header } from './components/Header/Header'
 import { About } from './pages/About'
+import { ColorChecker } from './pages/ColorChecker'
 import { Corpus } from './pages/Corpus'
 import { CorpusDetail } from './pages/CorpusDetail'
 import { Home } from './pages/Home'
@@ -25,6 +26,7 @@ export function App() {
           <Route path="/corpus" element={<Corpus />} />
           <Route path="/corpus/:id" element={<CorpusDetail />} />
           <Route path="/read/:unitId" element={<Read />} />
+          <Route path="/colors" element={<ColorChecker />} />
           <Route path="/about" element={<About />} />
         </Routes>
       </BrowserRouter>

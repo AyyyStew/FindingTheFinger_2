@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import type { TaxonomyLabel } from "../../api/types";
-import { getTaxonomyColor } from "../../utils/taxonomyColors";
+import { getCorpusColor } from "../../utils/taxonomyColors";
 import { UnitChildren } from "../UnitChildren/UnitChildren";
 import styles from "./UnitCard.module.css";
 
@@ -49,7 +49,7 @@ export function UnitCard({
   className,
   style,
 }: Props) {
-  const { solid, dim } = getTaxonomyColor(unit.taxonomy);
+  const { solid, dim } = getCorpusColor(unit.taxonomy, unit.corpus_name);
   const taxonomyRoot = unit.taxonomy.find((t) => t.level === 0);
   const showChildren = variant !== "micro" && (unit.height ?? 0) > 0;
 

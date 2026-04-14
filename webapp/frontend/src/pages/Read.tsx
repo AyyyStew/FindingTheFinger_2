@@ -8,7 +8,7 @@ import {
   fetchUnitLeaves,
   getUnitChildren,
 } from "../api/client";
-import { getTaxonomyColor } from "../utils/taxonomyColors";
+import { getCorpusColor } from "../utils/taxonomyColors";
 import styles from "./Read.module.css";
 
 const LEAF_PAGE_SIZE = 120;
@@ -32,8 +32,8 @@ export function Read() {
       .join(" / ");
   }, [data]);
   const taxonomyColor = useMemo(
-    () => getTaxonomyColor(data?.taxonomy ?? []),
-    [data?.taxonomy],
+    () => getCorpusColor(data?.taxonomy ?? [], data?.corpus_name),
+    [data?.corpus_name, data?.taxonomy],
   );
 
   const isNonLeaf = (data?.height ?? 0) > 0;

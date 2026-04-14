@@ -15,6 +15,7 @@ import {
   type MapVisibility,
   type MapOverlayOptions,
   type CorpusColorMap,
+  type CorpusTaxonomyStrokeMap,
   type CorpusLabelMap,
 } from "../../utils/mapLayers";
 import styles from "./MapCanvas.module.css";
@@ -61,6 +62,7 @@ interface MapCanvasProps {
   data: StandardRunData;
   visibility: MapVisibility;
   colorMap: CorpusColorMap;
+  taxonomyStrokeMap: CorpusTaxonomyStrokeMap;
   corpusLabelMap: CorpusLabelMap;
   onHover: (info: HoverInfo | null) => void;
   onClick?: (info: HoverInfo) => void;
@@ -163,6 +165,7 @@ export function MapCanvas({
   data,
   visibility,
   colorMap,
+  taxonomyStrokeMap,
   corpusLabelMap,
   onHover,
   onClick,
@@ -411,6 +414,7 @@ export function MapCanvas({
       renderData,
       visibility,
       colorMap,
+      taxonomyStrokeMap,
       corpusLabelMap,
       selectedUnitIds,
       overlays,
@@ -420,6 +424,7 @@ export function MapCanvas({
     renderData,
     visibility,
     colorMap,
+    taxonomyStrokeMap,
     corpusLabelMap,
     selectedUnitIds,
     overlays,

@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { searchUnits } from "../../api/client";
 import type { CorpusInfo, UnitBrief } from "../../api/types";
 import { useDebounce } from "../../hooks/useDebounce";
-import { getTaxonomyColor } from "../../utils/taxonomyColors";
+import { getCorpusColor } from "../../utils/taxonomyColors";
 import { UnitCard } from "../UnitCard/UnitCard";
 import styles from "./PassagePicker.module.css";
 
@@ -98,7 +98,7 @@ export function PassagePicker({
 
   if (selected) {
     if (compact) {
-      const { solid } = getTaxonomyColor(selected.taxonomy);
+      const { solid } = getCorpusColor(selected.taxonomy, selected.corpus_name);
       return (
         <div
           className={styles.selectedPill}
@@ -175,7 +175,7 @@ export function PassagePicker({
                     {items.map((unit, i) => {
                       const flatIdx = corpusOffset + i;
                       const path = unit.ancestor_path ?? unit.corpus_name;
-                      const { solid, dim } = getTaxonomyColor(unit.taxonomy);
+                      const { solid, dim } = getCorpusColor(unit.taxonomy, unit.corpus_name);
                       const taxonomyRoot = unit.taxonomy.find(
                         (t) => t.level === 0,
                       );

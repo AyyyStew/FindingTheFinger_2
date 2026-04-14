@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { CorpusInfo, EmbeddingProfileInfo } from '../../api/types'
-import { getTaxonomyColor } from '../../utils/taxonomyColors'
+import { getCorpusColor, getTaxonomyColor } from '../../utils/taxonomyColors'
 import styles from './FilterPanel.module.css'
 
 export interface Filters {
@@ -110,8 +110,8 @@ export function FilterPanel({ open, filters, onChange, corpora, embeddingProfile
 
             {groups.map(([groupName, groupCorpora]) => {
               const groupIds = groupCorpora.map((c) => c.id)
-              // Use first corpus in group for the group header color
-              const { solid } = getTaxonomyColor(groupCorpora[0]?.taxonomy ?? [])
+              const rootTaxonomy = groupCorpora[0]?.taxonomy.find((t) => t.level === 0)
+              const { solid } = getTaxonomyColor(rootTaxonomy ? [rootTaxonomy] : [])
               return (
                 <div key={groupName} className={styles.corpusGroup}>
                   <div className={styles.groupHeader}>
@@ -131,7 +131,7 @@ export function FilterPanel({ open, filters, onChange, corpora, embeddingProfile
                   <div className={styles.corpusToggles}>
                     {groupCorpora.map((corpus) => {
                       const isActive = filters.corpusIds.includes(corpus.id)
-                      const { solid: cSolid, dim: cDim } = getTaxonomyColor(corpus.taxonomy)
+                      const { solid: cSolid, dim: cDim } = getCorpusColor(corpus.taxonomy, corpus.name)
                       const path = taxonomyPath(corpus)
                       const levelLabel = levelAtHeight(corpus, filters.heightMin, filters.heightMax)
                       return (

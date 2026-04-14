@@ -15,7 +15,7 @@ import {
 } from "@deck.gl/layers";
 import type { Layer } from "@deck.gl/core";
 import type { CorpusInfo } from "../api/types";
-import { getTaxonomyColor } from "./taxonomyColors";
+import { getCorpusColor, getTaxonomyColors } from "./taxonomyColors";
 import type {
   CorpusVersionLayerData,
   SpanLayerData,
@@ -70,13 +70,44 @@ export function defaultVisibility(corpusVersionIds: number[]): MapVisibility {
 
 /** Maps corpus_id → RGBA tuple [0-255]. */
 export type CorpusColorMap = Map<number, [number, number, number]>;
+export type CorpusColorStackMap = Map<number, [number, number, number][]>;
+export type CorpusTaxonomyStrokeMap = Map<number, [number, number, number]>;
 export type CorpusLabelMap = Map<number, string>;
 
 export function buildCorpusColorMap(corpora: CorpusInfo[]): CorpusColorMap {
   const map: CorpusColorMap = new Map();
   for (const corpus of corpora) {
-    const { solid } = getTaxonomyColor(corpus.taxonomy);
+    const { solid } = getCorpusColor(corpus.taxonomy, corpus.name);
     map.set(corpus.id, hslStringToRgb(solid));
+  }
+  return map;
+}
+
+export function buildCorpusColorStackMap(
+  corpora: CorpusInfo[],
+): CorpusColorStackMap {
+  const map: CorpusColorStackMap = new Map();
+  for (const corpus of corpora) {
+    const colors = getTaxonomyColors(corpus.taxonomy, corpus.name)
+      .slice()
+      .reverse()
+      .map((color) => hslStringToRgb(color.solid));
+    if (colors.length > 0) map.set(corpus.id, colors);
+  }
+  return map;
+}
+
+export function buildCorpusTaxonomyStrokeMap(
+  corpora: CorpusInfo[],
+): CorpusTaxonomyStrokeMap {
+  const map: CorpusTaxonomyStrokeMap = new Map();
+  for (const corpus of corpora) {
+    const taxonomyColor = getTaxonomyColors(corpus.taxonomy).find(
+      (color) => color.kind === "taxonomy",
+    );
+    if (taxonomyColor) {
+      map.set(corpus.id, hslStringToRgb(taxonomyColor.solid));
+    }
   }
   return map;
 }
@@ -151,6 +182,7 @@ function buildPointStyleArrays(
     corpusVersionIds: Int32Array;
   },
   colorMap: CorpusColorMap,
+  strokeMap: CorpusTaxonomyStrokeMap,
   alpha: number,
   hiddenCorpora: Set<number>,
   hiddenVersions: Set<number>,
@@ -160,38 +192,42 @@ function buildPointStyleArrays(
   const fillColors = new Uint8Array(layer.count * 4);
   const lineColors = new Uint8Array(layer.count * 4);
   const fallback: [number, number, number] = [110, 110, 110];
+  const strokeFallback: [number, number, number] = [190, 190, 190];
   for (let i = 0; i < layer.count; i++) {
     const corpusId = layer.corpusIds[i];
     const corpusVersionId = layer.corpusVersionIds[i];
     const hidden =
       hiddenCorpora.has(corpusId) || hiddenVersions.has(corpusVersionId);
     const selected = selectedUnitIds?.has(unitIds[i]) ?? false;
-    const [r, g, b] = colorMap.get(corpusId) ?? fallback;
-    fillColors[i * 4] = selected ? 201 : r;
-    fillColors[i * 4 + 1] = selected ? 169 : g;
-    fillColors[i * 4 + 2] = selected ? 110 : b;
-    fillColors[i * 4 + 3] = hidden
-      ? 0
-      : selected
-        ? 235
-        : alpha;
-    // Softer edge than pure black: subtle charcoal border for dense clouds.
-    lineColors[i * 4] = selected ? 255 : 30;
-    lineColors[i * 4 + 1] = selected ? 243 : 34;
-    lineColors[i * 4 + 2] = selected ? 209 : 42;
-    lineColors[i * 4 + 3] = hidden
-      ? 0
-      : selected
-        ? 235
-        : Math.min(alpha, 145);
+    const [r, g, b] = selected ? [201, 169, 110] : (colorMap.get(corpusId) ?? fallback);
+    const [sr, sg, sb] = selected
+      ? [255, 243, 209]
+      : (strokeMap.get(corpusId) ?? strokeFallback);
+    fillColors[i * 4] = r;
+    fillColors[i * 4 + 1] = g;
+    fillColors[i * 4 + 2] = b;
+    fillColors[i * 4 + 3] = hidden ? 0 : selected ? 235 : alpha;
+    lineColors[i * 4] = sr;
+    lineColors[i * 4 + 1] = sg;
+    lineColors[i * 4 + 2] = sb;
+    lineColors[i * 4 + 3] = hidden ? 0 : selected ? 255 : Math.min(240, alpha + 25);
   }
   return { fillColors, lineColors };
 }
 
 // ── Scatter layer builder ─────────────────────────────────────────────────────
 
-const MIN_POINT_RADIUS_PX = 5;
 const HIGHLIGHT_RADIUS_PX = 6;
+const MAP_POINT_RADIUS_MIN_PX = 1.8;
+const MAP_POINT_RADIUS_MAX_PX = 5.4;
+const MAP_POINT_STROKE_WIDTH_PX = 1.6;
+
+function mapPointRadius(data: StandardRunData): number {
+  const rangeX = data.bounds.maxX - data.bounds.minX;
+  const rangeY = data.bounds.maxY - data.bounds.minY;
+  const rangeZ = data.bounds.maxZ - data.bounds.minZ;
+  return Math.max(rangeX, rangeY, rangeZ, 0.1) / 250;
+}
 
 /**
  * One ScatterplotLayer per visible corpus version.
@@ -200,6 +236,7 @@ export function buildCorpusVersionScatterLayers(
   data: StandardRunData,
   visibility: MapVisibility,
   colorMap: CorpusColorMap,
+  strokeMap: CorpusTaxonomyStrokeMap,
   selectedUnitIds: Set<number> | null = null,
 ): Layer[] {
   const hiddenCorpora = new Set(
@@ -216,13 +253,17 @@ export function buildCorpusVersionScatterLayers(
   return data.manifest.corpus_version_ids
     .filter((cvid) => visibility.scatterCorpusVersion[cvid] !== false)
     .map((cvid) => {
-      const layer = data.corpusVersionLayers.get(cvid) as CorpusVersionLayerData;
+      const layer = data.corpusVersionLayers.get(
+        cvid,
+      ) as CorpusVersionLayerData;
       if (!layer) return null;
       const alpha = 200;
-      const radius = 4;
+      const radius = mapPointRadius(data);
+
       const { fillColors, lineColors } = buildPointStyleArrays(
         layer,
         colorMap,
+        strokeMap,
         alpha,
         hiddenCorpora,
         hiddenVersions,
@@ -241,17 +282,25 @@ export function buildCorpusVersionScatterLayers(
           },
         },
         getRadius: radius,
-        radiusUnits: "pixels",
-        radiusMinPixels: MIN_POINT_RADIUS_PX,
+        radiusUnits: "common",
+        radiusMinPixels: MAP_POINT_RADIUS_MIN_PX,
+        radiusMaxPixels: MAP_POINT_RADIUS_MAX_PX,
         billboard: true,
         pickable: true,
         stroked: true,
         lineWidthUnits: "pixels",
-        lineWidthMinPixels: 1,
+        lineWidthMinPixels: MAP_POINT_STROKE_WIDTH_PX,
         parameters: { depthTest: false },
         updateTriggers: {
           getFillColor: [
             colorMap.size,
+            alpha,
+            visibility.corpora,
+            visibility.corpusVersions,
+            selectedUnitIds?.size ?? 0,
+          ],
+          getLineColor: [
+            strokeMap.size,
             alpha,
             visibility.corpora,
             visibility.corpusVersions,
@@ -525,7 +574,9 @@ function visiblePointLayers(
   return data.manifest.corpus_version_ids
     .filter((cvid) => visibility.scatterCorpusVersion[cvid] !== false)
     .map((cvid) => {
-      const layer = data.corpusVersionLayers.get(cvid) as CorpusVersionLayerData | undefined;
+      const layer = data.corpusVersionLayers.get(cvid) as
+        | CorpusVersionLayerData
+        | undefined;
       return layer
         ? {
             id: `cv${cvid}`,
@@ -629,11 +680,7 @@ export function buildVoronoiLayers(
     cacheKey,
     layers
       .map((layer, layerIndex) => {
-        const points = visibleLayerPoints(
-          layer,
-          hiddenCorpora,
-          hiddenVersions,
-        );
+        const points = visibleLayerPoints(layer, hiddenCorpora, hiddenVersions);
         if (points.length < 2) return null;
         const delaunay = Delaunay.from(
           points,
@@ -1015,12 +1062,19 @@ export function buildAllLayers(
   data: StandardRunData,
   visibility: MapVisibility,
   colorMap: CorpusColorMap,
+  taxonomyStrokeMap: CorpusTaxonomyStrokeMap,
   corpusLabelMap: CorpusLabelMap,
   selectedUnitIds: Set<number> | null = null,
   overlays: MapOverlayOptions = DEFAULT_OVERLAY_OPTIONS,
   enablePlanarDerivedOverlays = true,
 ): Layer[] {
-  const scatterLayers = buildCorpusVersionScatterLayers(data, visibility, colorMap, selectedUnitIds);
+  const scatterLayers = buildCorpusVersionScatterLayers(
+    data,
+    visibility,
+    colorMap,
+    taxonomyStrokeMap,
+    selectedUnitIds,
+  );
   const spanLayer = buildSpanScatterLayer(data, visibility, colorMap);
   return [
     ...(enablePlanarDerivedOverlays && overlays.kde
@@ -1029,15 +1083,10 @@ export function buildAllLayers(
     ...(enablePlanarDerivedOverlays && overlays.voronoi
       ? buildVoronoiLayers(data, visibility, colorMap)
       : []),
-    ...(overlays.hidePoints ? [] : scatterLayers),
     ...(overlays.hidePoints || !spanLayer ? [] : [spanLayer]),
+    ...(overlays.hidePoints ? [] : scatterLayers),
     ...(overlays.labels
-      ? buildLabelLayers(
-          data,
-          visibility,
-          colorMap,
-          corpusLabelMap,
-        )
+      ? buildLabelLayers(data, visibility, colorMap, corpusLabelMap)
       : []),
   ];
 }

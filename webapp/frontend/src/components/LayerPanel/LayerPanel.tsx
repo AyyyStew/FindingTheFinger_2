@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import type { CorpusInfo, TaxonomyLabel } from "../../api/types";
 import type { ProjectionManifest } from "../../utils/projectionLoader";
 import type { MapVisibility } from "../../utils/mapLayers";
-import { getTaxonomyColor, getTranslationColor } from "../../utils/taxonomyColors";
+import { getCorpusColor, getTaxonomyColor, getTranslationColor } from "../../utils/taxonomyColors";
 import styles from "./LayerPanel.module.css";
 
 interface LayerPanelProps {
@@ -345,8 +345,9 @@ export function LayerPanel({
                           {sgExpanded && (
                             <ul className={styles.corpusList}>
                               {sg.corpora.map((corpus) => {
-                                const { solid: corpusSolid } = getTaxonomyColor(
+                                const { solid: corpusSolid } = getCorpusColor(
                                   corpus.taxonomy,
+                                  corpus.name,
                                 );
                                 const visible = isCorpusVisible(corpus.id);
                                 const corpusExpanded = expandedCorpora.has(corpus.id);
@@ -458,6 +459,7 @@ export function LayerPanel({
                                           const { solid: translationSolid } =
                                             getTranslationColor(
                                               corpus.taxonomy,
+                                              corpus.name,
                                               `${version.id}:${versionLabel}`,
                                             );
                                           return (

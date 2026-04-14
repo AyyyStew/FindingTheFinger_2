@@ -8,7 +8,7 @@ import {
   SEARCH_MODES,
   type SearchMode,
 } from '../../utils/searchModes';
-import { getTaxonomyColor } from '../../utils/taxonomyColors';
+import { getCorpusColor } from '../../utils/taxonomyColors';
 import { PassagePicker } from '../PassagePicker/PassagePicker';
 import styles from './MapSearchPanel.module.css';
 
@@ -73,7 +73,7 @@ interface ResultRowProps {
 }
 
 function ResultRow({ result, showScore, rank, expanded, onToggleExpand, onHover, onFindSimilar }: ResultRowProps) {
-  const { solid, dim } = getTaxonomyColor(result.taxonomy);
+  const { solid, dim } = getCorpusColor(result.taxonomy, result.corpus_name);
   const label = result.reference_label ?? (result.result_type === 'span' ? `Span ${result.id}` : `Unit ${result.id}`);
   const hasText = Boolean(result.text);
 

@@ -30,6 +30,7 @@ import {
 import {
   buildCorpusColorMap,
   buildCorpusLabelMap,
+  buildCorpusTaxonomyStrokeMap,
   DEFAULT_OVERLAY_OPTIONS,
   type KdeBreakdown,
   type MapOverlayOptions,
@@ -132,6 +133,10 @@ export function Map() {
   }, [embeddingProfiles, selectedEmbeddingProfileId]);
 
   const colorMap = useMemo(() => buildCorpusColorMap(corpora), [corpora]);
+  const taxonomyStrokeMap = useMemo(
+    () => buildCorpusTaxonomyStrokeMap(corpora),
+    [corpora],
+  );
   const corpusLabelMap = useMemo(() => buildCorpusLabelMap(corpora), [corpora]);
 
   const [visibility, setVisibility] = useState<MapVisibility | null>(null);
@@ -707,6 +712,7 @@ export function Map() {
                   data={resolvedData}
                   visibility={resolvedVisibility}
                   colorMap={colorMap}
+                  taxonomyStrokeMap={taxonomyStrokeMap}
                   corpusLabelMap={corpusLabelMap}
                   overlays={overlays}
                   viewMode={viewMode}

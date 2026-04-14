@@ -17,6 +17,9 @@ export function Header() {
         <NavLink to="/corpus" className={({ isActive }) => isActive ? `${styles.link} ${styles.active}` : styles.link}>
           Corpus
         </NavLink>
+        <NavLink to="/colors" className={({ isActive }) => isActive ? `${styles.link} ${styles.active}` : styles.link}>
+          Colors
+        </NavLink>
         <NavLink to="/about" className={({ isActive }) => isActive ? `${styles.link} ${styles.active}` : styles.link}>
           About
         </NavLink>

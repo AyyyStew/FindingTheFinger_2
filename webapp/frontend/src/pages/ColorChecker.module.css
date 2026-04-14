@@ -1,0 +1,198 @@
+.page {
+  min-height: calc(100vh - var(--header-height));
+  max-width: var(--max-width-wide);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-6) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.title {
+  font-family: var(--font-serif);
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-normal);
+  color: var(--color-text-primary);
+}
+
+.subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.summary span {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-surface);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rootHeader,
+.child {
+  display: grid;
+  align-items: center;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.rootHeader {
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-color: color-mix(in srgb, var(--root-color) 45%, var(--color-border));
+  background:
+    linear-gradient(90deg, var(--root-dim), transparent 42%),
+    var(--color-surface);
+}
+
+.rootSwatch,
+.childSwatch {
+  border-radius: var(--radius-sm);
+  background: currentColor;
+  transition:
+    transform var(--ease-fast),
+    box-shadow var(--ease-fast),
+    border-color var(--ease-fast);
+}
+
+.rootSwatch {
+  width: 56px;
+  height: 40px;
+  color: var(--root-color);
+  border: 1px solid color-mix(in srgb, var(--root-color) 70%, white);
+}
+
+.rootText,
+.childText {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.rootName {
+  font-family: var(--font-serif);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-normal);
+  color: var(--root-color);
+}
+
+.childGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--space-2);
+}
+
+.child {
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-color: color-mix(in srgb, var(--child-color) 35%, var(--color-border));
+  background:
+    linear-gradient(90deg, var(--child-dim), transparent 55%),
+    var(--color-surface);
+}
+
+.childSwatch {
+  width: 40px;
+  height: 32px;
+  color: var(--child-color);
+  border: 1px solid color-mix(in srgb, var(--child-color) 70%, white);
+}
+
+.childName {
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.rootSwatch:hover,
+.childSwatch:hover,
+.stackDot:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 26%, transparent);
+}
+
+.rootSwatch:focus-visible,
+.childSwatch:focus-visible,
+.stackDot:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.copied {
+  flex: 0 0 auto;
+  width: fit-content;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-dim);
+  color: var(--color-accent-text);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  padding: var(--space-0-5) var(--space-2);
+}
+
+.miniStack {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.stackDot {
+  width: 12px;
+  height: 12px;
+  border: 1px solid color-mix(in srgb, var(--dot-color) 65%, white);
+  border-radius: 999px;
+  background: var(--dot-color);
+  color: var(--dot-color);
+}
+
+@media (max-width: 700px) {
+  .page {
+    padding: var(--space-4);
+  }
+
+  .header,
+  .rootText,
+  .childText {
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: var(--space-1);
+  }
+
+  .summary {
+    justify-content: flex-start;
+  }
+}
