@@ -169,7 +169,7 @@ export function Map() {
   };
 
   const toggleOverlay = useCallback(
-    (key: "voronoi" | "kde" | "labels" | "hidePoints") => {
+    (key: "voronoi" | "kde" | "labels" | "sequence" | "hidePoints") => {
       setOverlays((prev) => ({ ...prev, [key]: !prev[key] }));
     },
     [],
@@ -668,6 +668,13 @@ export function Map() {
                       </button>
                       <button
                         type="button"
+                        className={`${styles.overlayBtn} ${overlays.sequence ? styles.overlayBtnActive : ""}`}
+                        onClick={() => toggleOverlay("sequence")}
+                      >
+                        Sequence
+                      </button>
+                      <button
+                        type="button"
                         className={`${styles.overlayBtn} ${overlays.voronoi ? styles.overlayBtnActive : ""}`}
                         onClick={() => toggleOverlay("voronoi")}
                       >
@@ -698,6 +705,15 @@ export function Map() {
                         )}
                       </select>
                     </>
+                  )}
+                  {viewMode === "3d" && (
+                    <button
+                      type="button"
+                      className={`${styles.overlayBtn} ${overlays.sequence ? styles.overlayBtnActive : ""}`}
+                      onClick={() => toggleOverlay("sequence")}
+                    >
+                      Sequence
+                    </button>
                   )}
                   <button
                     type="button"

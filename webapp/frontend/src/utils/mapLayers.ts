@@ -43,6 +43,7 @@ export interface MapOverlayOptions {
   voronoi: boolean;
   kde: boolean;
   labels: boolean;
+  sequence: boolean;
   hidePoints: boolean;
   kdeBreakdown: KdeBreakdown;
 }
@@ -51,6 +52,7 @@ export const DEFAULT_OVERLAY_OPTIONS: MapOverlayOptions = {
   voronoi: false,
   kde: false,
   labels: false,
+  sequence: false,
   hidePoints: false,
   kdeBreakdown: "overall",
 };
@@ -465,6 +467,20 @@ interface KdeSegmentDatum {
 interface LabelDatum {
   position: [number, number, number];
   text: string;
+  color: [number, number, number, number];
+}
+
+interface SequencePointDatum {
+  order: number;
+  secondaryOrder: number;
+  tertiaryOrder: number;
+  position: [number, number, number];
+  color: [number, number, number, number];
+}
+
+interface SequenceSegmentDatum {
+  from: [number, number, number];
+  to: [number, number, number];
   color: [number, number, number, number];
 }
 
@@ -1056,6 +1072,133 @@ export function buildLabelLayers(
   ];
 }
 
+export function buildSequencePathLayers(
+  data: StandardRunData,
+  visibility: MapVisibility,
+  colorMap: CorpusColorMap,
+): Layer[] {
+  const hiddenCorpora = hiddenCorpusSet(visibility);
+  const hiddenVersions = hiddenVersionSet(visibility);
+  const nonLeafUnitIds = new Set(Object.keys(data.unitLabels).map(Number));
+
+  const passageSegments: SequenceSegmentDatum[] = [];
+  for (const cvid of data.manifest.corpus_version_ids) {
+    if (visibility.scatterCorpusVersion[cvid] === false) continue;
+    const layer = data.corpusVersionLayers.get(cvid);
+    if (!layer) continue;
+
+    const points: SequencePointDatum[] = [];
+    for (let i = 0; i < layer.count; i++) {
+      const unitId = layer.unitIds[i];
+      if (nonLeafUnitIds.has(unitId)) continue;
+      const corpusId = layer.corpusIds[i];
+      const corpusVersionId = layer.corpusVersionIds[i];
+      if (hiddenCorpora.has(corpusId)) continue;
+      if (hiddenVersions.has(corpusVersionId)) continue;
+      const [r, g, b] = colorMap.get(corpusId) ?? [230, 236, 245];
+      points.push({
+        order: unitId,
+        secondaryOrder: unitId,
+        tertiaryOrder: unitId,
+        position: [
+          layer.positions[i * 3],
+          layer.positions[i * 3 + 1],
+          layer.positions[i * 3 + 2],
+        ],
+        color: [r, g, b, 145],
+      });
+    }
+    passageSegments.push(...sequenceSegments(points));
+  }
+
+  const embeddingSegments: SequenceSegmentDatum[] = [];
+  const spanLayer = data.spanLayer as SpanLayerData | null;
+  if (spanLayer && visibility.spans !== false) {
+    const spanPointsByVersion = new Map<number, SequencePointDatum[]>();
+    for (let i = 0; i < spanLayer.count; i++) {
+      const corpusId = spanLayer.corpusIds[i];
+      const corpusVersionId = spanLayer.corpusVersionIds[i];
+      if (hiddenCorpora.has(corpusId)) continue;
+      if (hiddenVersions.has(corpusVersionId)) continue;
+      const [r, g, b] = colorMap.get(corpusId) ?? [201, 169, 110];
+
+      const points = spanPointsByVersion.get(corpusVersionId) ?? [];
+      points.push({
+        order: spanLayer.startUnitIds[i],
+        secondaryOrder: spanLayer.endUnitIds[i],
+        tertiaryOrder: spanLayer.spanIds[i],
+        position: [
+          spanLayer.positions[i * 3],
+          spanLayer.positions[i * 3 + 1],
+          spanLayer.positions[i * 3 + 2],
+        ],
+        color: [r, g, b, 200],
+      });
+      spanPointsByVersion.set(corpusVersionId, points);
+    }
+
+    for (const points of spanPointsByVersion.values()) {
+      embeddingSegments.push(...sequenceSegments(points));
+    }
+  }
+
+  const layers: Layer[] = [];
+  if (passageSegments.length > 0) {
+    layers.push(
+      new LineLayer({
+        id: "sequence-passages",
+        data: passageSegments,
+        getSourcePosition: (d: SequenceSegmentDatum) => d.from,
+        getTargetPosition: (d: SequenceSegmentDatum) => d.to,
+        getColor: (d: SequenceSegmentDatum) => d.color,
+        getWidth: 1.25,
+        widthUnits: "pixels",
+        pickable: false,
+        updateTriggers: { getColor: colorMap.size },
+        parameters: { depthTest: false },
+      }),
+    );
+  }
+  if (embeddingSegments.length > 0) {
+    layers.push(
+      new LineLayer({
+        id: "sequence-embeddings",
+        data: embeddingSegments,
+        getSourcePosition: (d: SequenceSegmentDatum) => d.from,
+        getTargetPosition: (d: SequenceSegmentDatum) => d.to,
+        getColor: (d: SequenceSegmentDatum) => d.color,
+        getWidth: 1.75,
+        widthUnits: "pixels",
+        pickable: false,
+        updateTriggers: { getColor: colorMap.size },
+        parameters: { depthTest: false },
+      }),
+    );
+  }
+  return layers;
+}
+
+function sequenceSegments(points: SequencePointDatum[]): SequenceSegmentDatum[] {
+  if (points.length < 2) return [];
+  const sorted = points
+    .slice()
+    .sort(
+      (a, b) =>
+        a.order - b.order ||
+        a.secondaryOrder - b.secondaryOrder ||
+        a.tertiaryOrder - b.tertiaryOrder,
+    );
+  const segments: SequenceSegmentDatum[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    segments.push({
+      from: sorted[i - 1].position,
+      to: sorted[i].position,
+      color: sorted[i - 1].color,
+    });
+  }
+  return segments;
+}
+
 // ── Master builder ────────────────────────────────────────────────────────────
 
 export function buildAllLayers(
@@ -1082,6 +1225,9 @@ export function buildAllLayers(
       : []),
     ...(enablePlanarDerivedOverlays && overlays.voronoi
       ? buildVoronoiLayers(data, visibility, colorMap)
+      : []),
+    ...(overlays.sequence
+      ? buildSequencePathLayers(data, visibility, colorMap)
       : []),
     ...(overlays.hidePoints || !spanLayer ? [] : [spanLayer]),
     ...(overlays.hidePoints ? [] : scatterLayers),
