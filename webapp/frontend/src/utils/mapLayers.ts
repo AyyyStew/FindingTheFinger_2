@@ -44,6 +44,8 @@ export interface MapOverlayOptions {
   kde: boolean;
   labels: boolean;
   sequence: boolean;
+  neighbors: boolean;
+  neighborCount: number;
   hidePoints: boolean;
   kdeBreakdown: KdeBreakdown;
 }
@@ -53,6 +55,8 @@ export const DEFAULT_OVERLAY_OPTIONS: MapOverlayOptions = {
   kde: false,
   labels: false,
   sequence: false,
+  neighbors: false,
+  neighborCount: 3,
   hidePoints: false,
   kdeBreakdown: "overall",
 };
@@ -479,6 +483,18 @@ interface SequencePointDatum {
 }
 
 interface SequenceSegmentDatum {
+  from: [number, number, number];
+  to: [number, number, number];
+  color: [number, number, number, number];
+}
+
+interface NeighborNodeDatum {
+  position: [number, number, number];
+  corpusId: number;
+  corpusVersionId: number;
+}
+
+interface NeighborSegmentDatum {
   from: [number, number, number];
   to: [number, number, number];
   color: [number, number, number, number];
@@ -1199,6 +1215,121 @@ function sequenceSegments(points: SequencePointDatum[]): SequenceSegmentDatum[] 
   return segments;
 }
 
+const NODE_TYPE_UNIT = 0;
+const NODE_TYPE_SPAN = 1;
+
+export function buildNeighborLayers(
+  data: StandardRunData,
+  visibility: MapVisibility,
+  colorMap: CorpusColorMap,
+  neighborCount: number,
+): Layer[] {
+  const neighborLayer = data.neighborLayer;
+  if (!neighborLayer || neighborLayer.count === 0) return [];
+
+  const hiddenCorpora = hiddenCorpusSet(visibility);
+  const hiddenVersions = hiddenVersionSet(visibility);
+  const unitNodes = new Map<number, NeighborNodeDatum>();
+  const spanNodes = new Map<number, NeighborNodeDatum>();
+
+  for (const cvid of data.manifest.corpus_version_ids) {
+    if (visibility.scatterCorpusVersion[cvid] === false) continue;
+    const layer = data.corpusVersionLayers.get(cvid);
+    if (!layer) continue;
+    for (let i = 0; i < layer.count; i++) {
+      const corpusId = layer.corpusIds[i];
+      const corpusVersionId = layer.corpusVersionIds[i];
+      if (hiddenCorpora.has(corpusId)) continue;
+      if (hiddenVersions.has(corpusVersionId)) continue;
+      unitNodes.set(layer.unitIds[i], {
+        corpusId,
+        corpusVersionId,
+        position: [
+          layer.positions[i * 3],
+          layer.positions[i * 3 + 1],
+          layer.positions[i * 3 + 2],
+        ],
+      });
+    }
+  }
+
+  const spanLayer = data.spanLayer;
+  if (spanLayer && visibility.spans !== false) {
+    for (let i = 0; i < spanLayer.count; i++) {
+      const corpusId = spanLayer.corpusIds[i];
+      const corpusVersionId = spanLayer.corpusVersionIds[i];
+      if (hiddenCorpora.has(corpusId)) continue;
+      if (hiddenVersions.has(corpusVersionId)) continue;
+      spanNodes.set(spanLayer.spanIds[i], {
+        corpusId,
+        corpusVersionId,
+        position: [
+          spanLayer.positions[i * 3],
+          spanLayer.positions[i * 3 + 1],
+          spanLayer.positions[i * 3 + 2],
+        ],
+      });
+    }
+  }
+
+  const maxRank = Math.max(1, Math.min(10, Math.round(neighborCount)));
+  const segments: NeighborSegmentDatum[] = [];
+
+  for (let i = 0; i < neighborLayer.count; i++) {
+    if (neighborLayer.ranks[i] > maxRank) continue;
+    const source = neighborNode(
+      neighborLayer.sourceTypes[i],
+      neighborLayer.sourceIds[i],
+      unitNodes,
+      spanNodes,
+    );
+    if (!source) continue;
+    const target = neighborNode(
+      neighborLayer.targetTypes[i],
+      neighborLayer.targetIds[i],
+      unitNodes,
+      spanNodes,
+    );
+    if (!target) continue;
+    const [r, g, b] = colorMap.get(source.corpusId) ?? [190, 198, 210];
+    const similarity = Math.max(0, Math.min(1, neighborLayer.similarities[i]));
+    segments.push({
+      from: source.position,
+      to: target.position,
+      color: [r, g, b, Math.round(45 + similarity * 85)],
+    });
+  }
+
+  if (segments.length === 0) return [];
+  return [
+    new LineLayer({
+      id: "full-space-neighbors",
+      data: segments,
+      getSourcePosition: (d: NeighborSegmentDatum) => d.from,
+      getTargetPosition: (d: NeighborSegmentDatum) => d.to,
+      getColor: (d: NeighborSegmentDatum) => d.color,
+      getWidth: 1,
+      widthUnits: "pixels",
+      pickable: false,
+      updateTriggers: {
+        getColor: [colorMap.size, maxRank],
+      },
+      parameters: { depthTest: false },
+    }),
+  ];
+}
+
+function neighborNode(
+  type: number,
+  id: number,
+  unitNodes: Map<number, NeighborNodeDatum>,
+  spanNodes: Map<number, NeighborNodeDatum>,
+): NeighborNodeDatum | undefined {
+  if (type === NODE_TYPE_UNIT) return unitNodes.get(id);
+  if (type === NODE_TYPE_SPAN) return spanNodes.get(id);
+  return undefined;
+}
+
 // ── Master builder ────────────────────────────────────────────────────────────
 
 export function buildAllLayers(
@@ -1228,6 +1359,9 @@ export function buildAllLayers(
       : []),
     ...(overlays.sequence
       ? buildSequencePathLayers(data, visibility, colorMap)
+      : []),
+    ...(overlays.neighbors
+      ? buildNeighborLayers(data, visibility, colorMap, overlays.neighborCount)
       : []),
     ...(overlays.hidePoints || !spanLayer ? [] : [spanLayer]),
     ...(overlays.hidePoints ? [] : scatterLayers),

@@ -49,6 +49,12 @@ interface BaseManifest {
   corpus_version_counts: Record<string, number>;
   has_span_layer?: boolean;
   span_count?: number;
+  has_neighbor_layer?: boolean;
+  neighbor_count?: number;
+  neighbor_k_max?: number;
+  neighbor_default_k?: number;
+  neighbor_scope?: string;
+  neighbor_node_types?: string[];
   embedding_profile?: {
     id: number;
     label: string;
@@ -120,6 +126,16 @@ export interface SpanLayerData {
   tokenCounts: Int32Array;
 }
 
+export interface NeighborLayerData {
+  count: number;
+  sourceTypes: Int32Array;
+  sourceIds: Int32Array;
+  targetTypes: Int32Array;
+  targetIds: Int32Array;
+  ranks: Int32Array;
+  similarities: Float32Array;
+}
+
 /** PCA corpus-version layer — raw components, pick any three for positions. */
 export interface PcaCorpusVersionLayerData {
   corpusVersionId: number;
@@ -136,6 +152,7 @@ export interface StandardRunData {
   manifest: UmapManifest | PhateManifest | IsomapManifest;
   corpusVersionLayers: Map<number, CorpusVersionLayerData>;
   spanLayer: SpanLayerData | null;
+  neighborLayer: NeighborLayerData | null;
   unitLabels: Record<string, string>;
   bounds: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
 }
@@ -144,6 +161,7 @@ export interface PcaRunData {
   manifest: PcaManifest;
   corpusVersionLayers: Map<number, PcaCorpusVersionLayerData>;
   spanLayer: PcaSpanLayerData | null;
+  neighborLayer: NeighborLayerData | null;
   unitLabels: Record<string, string>;
 }
 
@@ -239,6 +257,7 @@ export function resolvePcaData(
           tokenCounts: raw.spanLayer.tokenCounts,
         }
       : null,
+    neighborLayer: raw.neighborLayer,
     unitLabels: raw.unitLabels,
     bounds: computeBounds(corpusVersionLayers),
   };
@@ -342,6 +361,24 @@ export async function fetchSpanBin(
   if (!res.ok) throw new Error(`Failed to load ${method}/spans.bin (${res.status})`);
   const buffer = await res.arrayBuffer();
   return parseSpanBin(buffer, manifest);
+}
+
+export async function fetchNeighborBin(
+  runId: string,
+  method: ProjectionMethod,
+  manifest: ProjectionManifest,
+  profileLabel?: string,
+): Promise<NeighborLayerData | null> {
+  if (!manifest.has_neighbor_layer) return null;
+  let res = profileLabel
+    ? await fetch(`${BASE_URL}/${method}/${profileLabel}/${runId}/nearest_neighbors.bin`)
+    : await fetch(`${BASE_URL}/${method}/${runId}/nearest_neighbors.bin`);
+  if (!res.ok && profileLabel) {
+    res = await fetch(`${BASE_URL}/${method}/${runId}/nearest_neighbors.bin`);
+  }
+  if (!res.ok) return null;
+  const buffer = await res.arrayBuffer();
+  return parseNeighborBin(buffer);
 }
 
 // ── Binary parser ─────────────────────────────────────────────────────────────
@@ -460,6 +497,20 @@ function parseSpanBin(
     endUnitIds,
     primaryUnitIds,
     tokenCounts,
+  };
+}
+
+function parseNeighborBin(buffer: ArrayBuffer): NeighborLayerData {
+  const reader = createBinaryReader(buffer);
+  const N = reader.readU32();
+  return {
+    count: N,
+    sourceTypes: reader.readI32(N),
+    sourceIds: reader.readI32(N),
+    targetTypes: reader.readI32(N),
+    targetIds: reader.readI32(N),
+    ranks: reader.readI32(N),
+    similarities: reader.readF32(N),
   };
 }
 

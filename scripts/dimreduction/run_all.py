@@ -36,6 +36,8 @@ def parse_args():
                    help="Skip these methods")
     p.add_argument("--save-encoder", action="store_true",
                    help="Pass --save-encoder to compute scripts (default: off)")
+    p.add_argument("--no-neighbors", action="store_true",
+                   help="Pass --no-neighbors to compute scripts")
     p.add_argument("--profiles", nargs="+", choices=ALL_PROFILES, default=None,
                    help="Run only these embedding profiles (default: all)")
     p.add_argument("--profile", action="append", choices=ALL_PROFILES, default=None,
@@ -44,7 +46,14 @@ def parse_args():
     return p.parse_args()
 
 
-def _import_and_run(method: str, run_id: str, output_dir: str, save_encoder: bool, profile: str) -> None:
+def _import_and_run(
+    method: str,
+    run_id: str,
+    output_dir: str,
+    save_encoder: bool,
+    no_neighbors: bool,
+    profile: str,
+) -> None:
     """Import the compute_<method> module and call main(run_id)."""
     # Patch sys.argv so each module's parse_args() sees --output-dir.
     old_argv = sys.argv
@@ -53,6 +62,8 @@ def _import_and_run(method: str, run_id: str, output_dir: str, save_encoder: boo
                 "--profile", profile]
     if save_encoder:
         sys.argv.append("--save-encoder")
+    if no_neighbors:
+        sys.argv.append("--no-neighbors")
     try:
         if method == "umap":
             from scripts.dimreduction.compute_umap import main
@@ -93,7 +104,14 @@ def main() -> None:
             print(f"  {method.upper()}  {profile}")
             print(f"{sep}")
             try:
-                _import_and_run(method, run_id, args.output_dir, args.save_encoder, profile)
+                _import_and_run(
+                    method,
+                    run_id,
+                    args.output_dir,
+                    args.save_encoder,
+                    args.no_neighbors,
+                    profile,
+                )
                 results[result_key] = "OK"
             except Exception:
                 traceback.print_exc()

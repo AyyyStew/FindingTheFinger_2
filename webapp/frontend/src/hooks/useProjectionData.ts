@@ -4,6 +4,7 @@ import {
   fetchManifest,
   fetchCorpusVersionBin,
   fetchSpanBin,
+  fetchNeighborBin,
   fetchUnitLabels,
   computeBounds,
   type ProjectionMethod,
@@ -62,11 +63,12 @@ export function useProjectionData(method: ProjectionMethod, profileLabel = 'wind
           message: `Loading ${manifest.corpus_version_ids.length} corpus-version layers…`,
         }));
 
-        const [corpusVersionLayerResults, spanLayerResult, unitLabels] = await Promise.all([
+        const [corpusVersionLayerResults, spanLayerResult, neighborLayerResult, unitLabels] = await Promise.all([
           Promise.all(
             manifest.corpus_version_ids.map(cvid => fetchCorpusVersionBin(runId, method, cvid, manifest, profileLabel)),
           ),
           fetchSpanBin(runId, method, manifest, profileLabel),
+          fetchNeighborBin(runId, method, manifest, profileLabel),
           fetchUnitLabels(runId, method, profileLabel),
         ]);
         if (cancelled) return;
@@ -79,7 +81,13 @@ export function useProjectionData(method: ProjectionMethod, profileLabel = 'wind
               l => [(l as PcaCorpusVersionLayerData).corpusVersionId, l as PcaCorpusVersionLayerData],
             ),
           );
-          result = { manifest, corpusVersionLayers, spanLayer: spanLayerResult as PcaSpanLayerData | null, unitLabels } as PcaRunData;
+          result = {
+            manifest,
+            corpusVersionLayers,
+            spanLayer: spanLayerResult as PcaSpanLayerData | null,
+            neighborLayer: neighborLayerResult,
+            unitLabels,
+          } as PcaRunData;
         } else {
           const corpusVersionLayers = new Map(
             corpusVersionLayerResults.map(
@@ -87,7 +95,14 @@ export function useProjectionData(method: ProjectionMethod, profileLabel = 'wind
             ),
           );
           const bounds = computeBounds(corpusVersionLayers);
-          result = { manifest, corpusVersionLayers, spanLayer: spanLayerResult as SpanLayerData | null, unitLabels, bounds } as StandardRunData;
+          result = {
+            manifest,
+            corpusVersionLayers,
+            spanLayer: spanLayerResult as SpanLayerData | null,
+            neighborLayer: neighborLayerResult,
+            unitLabels,
+            bounds,
+          } as StandardRunData;
         }
 
         _cache.set(cacheKey, result);

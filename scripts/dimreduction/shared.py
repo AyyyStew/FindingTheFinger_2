@@ -51,6 +51,11 @@ DEFAULT_OUTPUT_DIR  = "static/dimreduction"
 DEFAULT_SAMPLE_PER_DIV = 100
 RANDOM_STATE        = 42
 POSTGRES_IN_BATCH_SIZE = 10_000
+NEIGHBOR_K_MAX      = 10
+NEIGHBOR_DEFAULT_K  = 3
+NEIGHBOR_QUERY_BLOCK_SIZE = 1024
+NODE_TYPE_UNIT      = 0
+NODE_TYPE_SPAN      = 1
 
 
 def _vector_to_list(value) -> list[float]:
@@ -440,6 +445,159 @@ def fold_span_positions_to_units(
     return unit_ids, unit_coords
 
 
+def _normalize_matrix(matrix: np.ndarray) -> np.ndarray:
+    matrix = np.asarray(matrix, dtype=np.float32)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    return matrix / np.maximum(norms, 1e-12)
+
+
+def _exact_torch_topk_neighbors(
+    matrix: np.ndarray,
+    k_max: int,
+    device: str = "cuda",
+    query_block_size: int = NEIGHBOR_QUERY_BLOCK_SIZE,
+) -> tuple[np.ndarray, np.ndarray]:
+    if device != "cuda" and not device.startswith("cuda:"):
+        raise SystemExit(
+            "Exact full-space neighbor export is only enabled on CUDA. "
+            "Use --no-neighbors to regenerate projections without the neighbor graph."
+        )
+
+    try:
+        import torch
+    except ImportError as exc:
+        raise SystemExit(
+            "Exact full-space neighbor export requires PyTorch with CUDA. "
+            "Use --no-neighbors to skip neighbor graph export."
+        ) from exc
+
+    if not torch.cuda.is_available():
+        raise SystemExit(
+            "CUDA is not available, and exact full-space neighbor export is too large "
+            "for the CPU path. Use --no-neighbors to skip neighbor graph export."
+        )
+
+    n = matrix.shape[0]
+    k = min(k_max, max(0, n - 1))
+    if k == 0:
+        return np.empty((n, 0), dtype=np.int64), np.empty((n, 0), dtype=np.float32)
+
+    if query_block_size <= 0:
+        query_block_size = NEIGHBOR_QUERY_BLOCK_SIZE
+
+    print(f"  normalizing {n:,} vectors for exact cosine search...")
+    normalized = _normalize_matrix(matrix)
+
+    print(f"  uploading normalized matrix to {device}  shape={normalized.shape}")
+    all_vectors = torch.from_numpy(normalized).to(device=device, dtype=torch.float32)
+
+    all_indices = np.empty((n, k), dtype=np.int64)
+    all_scores = np.empty((n, k), dtype=np.float32)
+    n_blocks = (n + query_block_size - 1) // query_block_size
+
+    with torch.inference_mode():
+        for block_index, start in enumerate(range(0, n, query_block_size), start=1):
+            end = min(start + query_block_size, n)
+            print(
+                f"  exact kNN block {block_index}/{n_blocks}  rows {start:,}:{end:,}",
+                flush=True,
+            )
+            query = all_vectors[start:end]
+            scores = query @ all_vectors.T
+            local_rows = torch.arange(end - start, device=device)
+            scores[local_rows, start + local_rows] = -float("inf")
+            values, indices = torch.topk(scores, k=k, dim=1, largest=True, sorted=True)
+            all_scores[start:end] = values.cpu().numpy()
+            all_indices[start:end] = indices.cpu().numpy()
+            del scores, values, indices, query
+
+    del all_vectors
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    return all_indices, all_scores
+
+
+def compute_neighbor_edges(
+    session: Session,
+    span_ids: list[int],
+    span_matrix: np.ndarray,
+    span_meta: dict[int, dict[str, Any]],
+    children_of: dict[int, list[int]],
+    parent_of: dict[int, int],
+    projected_unit_ids: set[int],
+    k_max: int = NEIGHBOR_K_MAX,
+) -> dict[str, np.ndarray] | None:
+    """
+    Precompute global nearest-neighbor edges in the original embedding space.
+    Includes all projected unit nodes plus span nodes. Unit vectors are folded
+    from covered span vectors, then parent units are averaged from children.
+    """
+    if len(span_ids) < 2 or k_max <= 0:
+        return None
+
+    print(f"Computing full-space nearest neighbors (k={k_max})...")
+    leaf_unit_ids, leaf_vectors = fold_span_positions_to_units(session, span_ids, span_matrix)
+    unit_vectors = aggregate_parents(leaf_unit_ids, leaf_vectors, children_of, parent_of)
+
+    print("  assembling unit + span node matrix...")
+    node_types: list[int] = []
+    node_ids: list[int] = []
+    vectors: list[np.ndarray] = []
+
+    for unit_id in sorted(projected_unit_ids):
+        vector = unit_vectors.get(unit_id)
+        if vector is None:
+            continue
+        node_types.append(NODE_TYPE_UNIT)
+        node_ids.append(unit_id)
+        vectors.append(vector)
+
+    span_index = {span_id: idx for idx, span_id in enumerate(span_ids)}
+    for span_id in sorted(span_ids):
+        idx = span_index[span_id]
+        node_types.append(NODE_TYPE_SPAN)
+        node_ids.append(span_id)
+        vectors.append(span_matrix[idx])
+
+    if len(vectors) < 2:
+        print("  skipped nearest neighbors: fewer than 2 nodes")
+        return None
+
+    matrix = np.array(vectors, dtype=np.float32)
+    print(
+        f"  exact full-space kNN nodes={len(vectors):,} dim={matrix.shape[1]:,} "
+        f"query_block_size={NEIGHBOR_QUERY_BLOCK_SIZE:,}"
+    )
+    indices, scores = _exact_torch_topk_neighbors(matrix, k_max)
+
+    source_types: list[int] = []
+    source_ids: list[int] = []
+    target_types: list[int] = []
+    target_ids: list[int] = []
+    ranks: list[int] = []
+    similarities: list[float] = []
+
+    for source_idx, neighbor_indices in enumerate(indices):
+        for rank_index, target_idx in enumerate(neighbor_indices, start=1):
+            source_types.append(node_types[source_idx])
+            source_ids.append(node_ids[source_idx])
+            target_types.append(node_types[target_idx])
+            target_ids.append(node_ids[target_idx])
+            ranks.append(rank_index)
+            similarities.append(float(scores[source_idx, rank_index - 1]))
+
+    print(f"  nearest_neighbors.bin   {len(source_ids):,} directed edges")
+    return {
+        "source_types": np.array(source_types, dtype=np.int32),
+        "source_ids": np.array(source_ids, dtype=np.int32),
+        "target_types": np.array(target_types, dtype=np.int32),
+        "target_ids": np.array(target_ids, dtype=np.int32),
+        "ranks": np.array(ranks, dtype=np.int32),
+        "similarities": np.array(similarities, dtype=np.float32),
+    }
+
+
 def compute_leaf_ancestors(
     leaf_ids: list[int],
     parent_of: dict[int, int],
@@ -484,6 +642,7 @@ def write_method_output(
     n_components: int = 2,
     span_positions: dict[int, np.ndarray] | None = None,
     span_meta: dict[int, dict[str, Any]] | None = None,
+    neighbor_edges: dict[str, np.ndarray] | None = None,
     profile: EmbeddingProfile | None = None,
 ) -> None:
     """
@@ -568,6 +727,23 @@ def write_method_output(
         span_count = len(span_ids)
         print(f"  spans.bin   {span_count:,} points")
 
+    # ── Full-space nearest-neighbor edges ────────────────────────────────────
+    # Format:
+    # [N][source_types][source_ids][target_types][target_ids][ranks][similarities]
+    neighbor_count = 0
+    if neighbor_edges is not None and len(neighbor_edges["source_ids"]) > 0:
+        cols = [
+            (neighbor_edges["source_types"], "int32"),
+            (neighbor_edges["source_ids"], "int32"),
+            (neighbor_edges["target_types"], "int32"),
+            (neighbor_edges["target_ids"], "int32"),
+            (neighbor_edges["ranks"], "int32"),
+            (neighbor_edges["similarities"], "float32"),
+        ]
+        _write_columnar_bin(method_dir / "nearest_neighbors.bin", cols)
+        neighbor_count = len(neighbor_edges["source_ids"])
+        print(f"  nearest_neighbors.bin   {neighbor_count:,} edges")
+
     # ── Labels + manifest ─────────────────────────────────────────────────────
 
     labels_path = method_dir / "unit_labels.json"
@@ -584,6 +760,12 @@ def write_method_output(
         "has_corpus_version_ids": True,
         "has_span_layer": span_positions is not None,
         "span_count": span_count,
+        "has_neighbor_layer": neighbor_count > 0,
+        "neighbor_count": neighbor_count,
+        "neighbor_k_max": NEIGHBOR_K_MAX,
+        "neighbor_default_k": NEIGHBOR_DEFAULT_K,
+        "neighbor_scope": "global",
+        "neighbor_node_types": ["unit", "span"],
         "embedding_profile": (
             {
                 "id": profile.id,

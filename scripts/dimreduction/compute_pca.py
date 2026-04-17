@@ -24,7 +24,7 @@ import numpy as np
 from .shared import (
     DEFAULT_OUTPUT_DIR,
     aggregate_parents, fold_span_positions_to_units, get_session, load_span_embeddings,
-    load_unit_labels, load_unit_tree,
+    compute_neighbor_edges, load_unit_labels, load_unit_tree,
     write_method_output,
 )
 
@@ -42,6 +42,8 @@ def parse_args():
     p.add_argument("--max-components",      type=int,   default=DEFAULT_MAX_COMPONENTS,
                    help="Hard cap on number of PCs retained (default: 50)")
     p.add_argument("--profile",             default="window-50")
+    p.add_argument("--no-neighbors",        action="store_true",
+                   help="Skip full-space nearest-neighbor graph export")
     p.add_argument("--save-encoder",        action="store_true",
                    help="Save fitted encoder.pkl (default: off)")
     p.add_argument("--output-dir",          default=DEFAULT_OUTPUT_DIR)
@@ -105,6 +107,19 @@ def main(run_id: str | None = None) -> None:
         non_leaf_ids = [uid for uid in positions if height_of.get(uid, 0) > 0]
         print(f"Loading labels for {len(non_leaf_ids):,} non-leaf units...")
         unit_labels = load_unit_labels(session, non_leaf_ids)
+        if args.no_neighbors:
+            print("Skipping nearest-neighbor graph export (--no-neighbors)")
+            neighbor_edges = None
+        else:
+            neighbor_edges = compute_neighbor_edges(
+                session,
+                span_ids,
+                matrix,
+                span_meta,
+                children_of,
+                parent_of,
+                set(positions),
+            )
 
     write_method_output(
         base_output_dir = output_dir,
@@ -124,6 +139,7 @@ def main(run_id: str | None = None) -> None:
         n_components    = n_components,
         span_positions  = span_positions,
         span_meta       = span_meta,
+        neighbor_edges  = neighbor_edges,
         profile         = profile,
     )
 

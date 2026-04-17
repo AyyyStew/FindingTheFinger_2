@@ -64,11 +64,12 @@ const KDE_BREAKDOWN_LABELS: Record<KdeBreakdown, string> = {
 };
 
 const OVERLAY_TOOLTIPS: Record<
-  "labels" | "sequence" | "voronoi" | "kde" | "hidePoints",
+  "labels" | "sequence" | "neighbors" | "voronoi" | "kde" | "hidePoints",
   string
 > = {
   labels: "Show corpus labels near the center of each visible group.",
   sequence: "Connect adjacent passages so text flow is visible on the map.",
+  neighbors: "Connect each node to nearby nodes in full embedding space.",
   voronoi: "Draw local territory cells around points for dense regions.",
   kde: "Show density clouds for the visible projection points.",
   hidePoints: "Hide individual points while keeping enabled overlays visible.",
@@ -181,11 +182,16 @@ export function Map() {
   };
 
   const toggleOverlay = useCallback(
-    (key: "voronoi" | "kde" | "labels" | "sequence" | "hidePoints") => {
+    (key: "voronoi" | "kde" | "labels" | "sequence" | "neighbors" | "hidePoints") => {
       setOverlays((prev) => ({ ...prev, [key]: !prev[key] }));
     },
     [],
   );
+
+  const setNeighborCount = useCallback((neighborCount: number) => {
+    const clamped = Math.max(1, Math.min(10, Math.round(neighborCount)));
+    setOverlays((prev) => ({ ...prev, neighborCount: clamped }));
+  }, []);
 
   const setKdeBreakdown = useCallback((kdeBreakdown: KdeBreakdown) => {
     setOverlays((prev) => ({ ...prev, kdeBreakdown }));
@@ -686,6 +692,34 @@ export function Map() {
                           Sequence
                         </button>
                       </Tooltip>
+                      <Tooltip content={OVERLAY_TOOLTIPS.neighbors}>
+                        <button
+                          type="button"
+                          className={`${styles.overlayBtn} ${overlays.neighbors ? styles.overlayBtnActive : ""}`}
+                          onClick={() => toggleOverlay("neighbors")}
+                        >
+                          Neighbors
+                        </button>
+                      </Tooltip>
+                      {overlays.neighbors && (
+                        <label className={styles.overlaySliderLabel}>
+                          <span>Neighbors</span>
+                          <input
+                            className={styles.overlaySlider}
+                            type="range"
+                            min={1}
+                            max={10}
+                            step={1}
+                            value={overlays.neighborCount}
+                            onChange={(e) =>
+                              setNeighborCount(Number(e.target.value))
+                            }
+                          />
+                          <span className={styles.overlaySliderValue}>
+                            {overlays.neighborCount}
+                          </span>
+                        </label>
+                      )}
                       <Tooltip content={OVERLAY_TOOLTIPS.voronoi}>
                         <button
                           type="button"
@@ -729,15 +763,45 @@ export function Map() {
                     </>
                   )}
                   {viewMode === "3d" && (
-                    <Tooltip content={OVERLAY_TOOLTIPS.sequence}>
-                      <button
-                        type="button"
-                        className={`${styles.overlayBtn} ${overlays.sequence ? styles.overlayBtnActive : ""}`}
-                        onClick={() => toggleOverlay("sequence")}
-                      >
-                        Sequence
-                      </button>
-                    </Tooltip>
+                    <>
+                      <Tooltip content={OVERLAY_TOOLTIPS.sequence}>
+                        <button
+                          type="button"
+                          className={`${styles.overlayBtn} ${overlays.sequence ? styles.overlayBtnActive : ""}`}
+                          onClick={() => toggleOverlay("sequence")}
+                        >
+                          Sequence
+                        </button>
+                      </Tooltip>
+                      <Tooltip content={OVERLAY_TOOLTIPS.neighbors}>
+                        <button
+                          type="button"
+                          className={`${styles.overlayBtn} ${overlays.neighbors ? styles.overlayBtnActive : ""}`}
+                          onClick={() => toggleOverlay("neighbors")}
+                        >
+                          Neighbors
+                        </button>
+                      </Tooltip>
+                      {overlays.neighbors && (
+                        <label className={styles.overlaySliderLabel}>
+                          <span>Neighbors</span>
+                          <input
+                            className={styles.overlaySlider}
+                            type="range"
+                            min={1}
+                            max={10}
+                            step={1}
+                            value={overlays.neighborCount}
+                            onChange={(e) =>
+                              setNeighborCount(Number(e.target.value))
+                            }
+                          />
+                          <span className={styles.overlaySliderValue}>
+                            {overlays.neighborCount}
+                          </span>
+                        </label>
+                      )}
+                    </>
                   )}
                   <Tooltip content={OVERLAY_TOOLTIPS.hidePoints}>
                     <button
