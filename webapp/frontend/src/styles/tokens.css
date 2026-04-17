@@ -106,7 +106,7 @@
   --z-base:    0;
   --z-overlay: 100;
   --z-modal:   200;
-  --z-tooltip: 300;
+  --z-tooltip: 1000;
 
   /* ===== Layout ===== */
   --header-height: 52px;

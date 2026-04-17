@@ -15,6 +15,7 @@ import {
   type MapSearchPanelHandle,
 } from "../components/MapSearchPanel/MapSearchPanel";
 import { MapToolsPanel } from "../components/MapToolsPanel/MapToolsPanel";
+import { Tooltip } from "../components/Tooltip/Tooltip";
 import { UnitCard } from "../components/UnitCard/UnitCard";
 import { useProjectionData } from "../hooks/useProjectionData";
 import {
@@ -60,6 +61,17 @@ const METHOD_TOOLTIPS: Record<ProjectionMethod, string> = {
 const KDE_BREAKDOWN_LABELS: Record<KdeBreakdown, string> = {
   overall: "whole view",
   corpus: "by corpus",
+};
+
+const OVERLAY_TOOLTIPS: Record<
+  "labels" | "sequence" | "voronoi" | "kde" | "hidePoints",
+  string
+> = {
+  labels: "Show corpus labels near the center of each visible group.",
+  sequence: "Connect adjacent passages so text flow is visible on the map.",
+  voronoi: "Draw local territory cells around points for dense regions.",
+  kde: "Show density clouds for the visible projection points.",
+  hidePoints: "Hide individual points while keeping enabled overlays visible.",
 };
 
 function rgbTupleToCss([r, g, b]: [number, number, number]): string {
@@ -576,17 +588,14 @@ export function Map() {
           <div className={styles.toolbar}>
             <div className={styles.methodSelector}>
               {PROJECTION_METHODS.map((m) => (
-                <div key={m} className={styles.methodBtnWrap}>
+                <Tooltip key={m} content={METHOD_TOOLTIPS[m]} placement="bottom">
                   <button
                     className={`${styles.methodBtn} ${m === method ? styles.methodBtnActive : ""}`}
                     onClick={() => handleMethodChange(m)}
                   >
                     {METHOD_LABELS[m]}
                   </button>
-                  <div className={styles.methodTooltip}>
-                    {METHOD_TOOLTIPS[m]}
-                  </div>
-                </div>
+                </Tooltip>
               ))}
             </div>
 
@@ -659,13 +668,68 @@ export function Map() {
                 >
                   {viewMode === "2d" && (
                     <>
-                      <button
-                        type="button"
-                        className={`${styles.overlayBtn} ${overlays.labels ? styles.overlayBtnActive : ""}`}
-                        onClick={() => toggleOverlay("labels")}
+                      <Tooltip content={OVERLAY_TOOLTIPS.labels}>
+                        <button
+                          type="button"
+                          className={`${styles.overlayBtn} ${overlays.labels ? styles.overlayBtnActive : ""}`}
+                          onClick={() => toggleOverlay("labels")}
+                        >
+                          Labels
+                        </button>
+                      </Tooltip>
+                      <Tooltip content={OVERLAY_TOOLTIPS.sequence}>
+                        <button
+                          type="button"
+                          className={`${styles.overlayBtn} ${overlays.sequence ? styles.overlayBtnActive : ""}`}
+                          onClick={() => toggleOverlay("sequence")}
+                        >
+                          Sequence
+                        </button>
+                      </Tooltip>
+                      <Tooltip content={OVERLAY_TOOLTIPS.voronoi}>
+                        <button
+                          type="button"
+                          className={`${styles.overlayBtn} ${overlays.voronoi ? styles.overlayBtnActive : ""}`}
+                          onClick={() => toggleOverlay("voronoi")}
+                        >
+                          Voronoi
+                        </button>
+                      </Tooltip>
+                      <Tooltip content={OVERLAY_TOOLTIPS.kde}>
+                        <button
+                          type="button"
+                          className={`${styles.overlayBtn} ${overlays.kde ? styles.overlayBtnActive : ""}`}
+                          onClick={() => toggleOverlay("kde")}
+                        >
+                          KDE
+                        </button>
+                      </Tooltip>
+                      <Tooltip
+                        content="Choose whether KDE density is calculated for the whole view or separately by corpus."
+                        disabled={!overlays.kde}
                       >
-                        Labels
-                      </button>
+                        <select
+                          className={styles.overlaySelect}
+                          value={overlays.kdeBreakdown}
+                          onChange={(e) =>
+                            setKdeBreakdown(e.target.value as KdeBreakdown)
+                          }
+                          disabled={!overlays.kde}
+                          aria-label="KDE breakdown"
+                        >
+                          {Object.entries(KDE_BREAKDOWN_LABELS).map(
+                            ([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </Tooltip>
+                    </>
+                  )}
+                  {viewMode === "3d" && (
+                    <Tooltip content={OVERLAY_TOOLTIPS.sequence}>
                       <button
                         type="button"
                         className={`${styles.overlayBtn} ${overlays.sequence ? styles.overlayBtnActive : ""}`}
@@ -673,55 +737,17 @@ export function Map() {
                       >
                         Sequence
                       </button>
-                      <button
-                        type="button"
-                        className={`${styles.overlayBtn} ${overlays.voronoi ? styles.overlayBtnActive : ""}`}
-                        onClick={() => toggleOverlay("voronoi")}
-                      >
-                        Voronoi
-                      </button>
-                      <button
-                        type="button"
-                        className={`${styles.overlayBtn} ${overlays.kde ? styles.overlayBtnActive : ""}`}
-                        onClick={() => toggleOverlay("kde")}
-                      >
-                        KDE
-                      </button>
-                      <select
-                        className={styles.overlaySelect}
-                        value={overlays.kdeBreakdown}
-                        onChange={(e) =>
-                          setKdeBreakdown(e.target.value as KdeBreakdown)
-                        }
-                        disabled={!overlays.kde}
-                        aria-label="KDE breakdown"
-                      >
-                        {Object.entries(KDE_BREAKDOWN_LABELS).map(
-                          ([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </>
+                    </Tooltip>
                   )}
-                  {viewMode === "3d" && (
+                  <Tooltip content={OVERLAY_TOOLTIPS.hidePoints}>
                     <button
                       type="button"
-                      className={`${styles.overlayBtn} ${overlays.sequence ? styles.overlayBtnActive : ""}`}
-                      onClick={() => toggleOverlay("sequence")}
+                      className={`${styles.overlayBtn} ${overlays.hidePoints ? styles.overlayBtnActive : ""}`}
+                      onClick={() => toggleOverlay("hidePoints")}
                     >
-                      Sequence
+                      Hide points
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    className={`${styles.overlayBtn} ${overlays.hidePoints ? styles.overlayBtnActive : ""}`}
-                    onClick={() => toggleOverlay("hidePoints")}
-                  >
-                    Hide points
-                  </button>
+                  </Tooltip>
                 </div>
                 <MapCanvas
                   key={`${method}-${viewMode}`}
