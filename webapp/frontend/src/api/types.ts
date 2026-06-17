@@ -1,3 +1,5 @@
+import type { SemanticSearchGrouping } from '../utils/semanticSearchGrouping'
+
 export interface CorpusVersionInfo {
   id: number
   translation_name: string | null
@@ -99,12 +101,14 @@ export interface SearchResponse {
   results: SearchResult[]
   mode: 'semantic' | 'keyword' | 'passage'
   embedding_profile_id?: number | null
+  result_grouping: SemanticSearchGrouping
 }
 
 export interface SemanticSearchRequest {
   query: string
   method_id?: number
   embedding_profile_id?: number
+  result_grouping?: SemanticSearchGrouping
   height_min?: number
   height_max?: number
   depth_min?: number

@@ -48,6 +48,24 @@
   line-height: var(--leading-relaxed);
 }
 
+.groupingField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.groupingLabel {
+  composes: sectionLabel from '../../styles/primitives.module.css';
+  font-size: var(--text-caption);
+}
+
+.groupingSelect {
+  composes: inputField from '../../styles/primitives.module.css';
+  min-height: var(--control-height-md);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
 .bottomRow {
   display: flex;
   align-items: center;

@@ -26,6 +26,7 @@ from ..schemas import (
 from ..taxonomy import build_corpus_taxonomy_map
 
 router = APIRouter(prefix="/api/search")
+SEMANTIC_RESULT_GROUPINGS = {"global", "per_corpus"}
 
 
 def _default_method_id(db: Session) -> int:
@@ -135,19 +136,29 @@ def _span_vector_search(
     tax_map: dict[int, list[TaxonomyLabel]],
     exclude_unit_id: int | None = None,
     offset: int = 0,
+    result_grouping: str = "global",
 ) -> list[SearchResult]:
     if corpus_ids is not None and len(corpus_ids) == 0:
         return []
     if corpus_version_ids is not None and len(corpus_version_ids) == 0:
         return []
 
+    distance_expr = SpanEmbedding.vector.cosine_distance(query_vec)
     stmt = (
         select(
-            EmbeddingSpan,
-            Unit,
+            EmbeddingSpan.id.label("span_id"),
+            EmbeddingSpan.text.label("text"),
+            EmbeddingSpan.reference_label.label("span_reference_label"),
+            EmbeddingSpan.ancestor_path.label("span_ancestor_path"),
+            EmbeddingSpan.corpus_id.label("corpus_id"),
+            EmbeddingSpan.start_unit_id.label("start_unit_id"),
+            EmbeddingSpan.end_unit_id.label("end_unit_id"),
+            Unit.reference_label.label("unit_reference_label"),
+            Unit.ancestor_path.label("unit_ancestor_path"),
+            Unit.height.label("height"),
             Corpus.name.label("corpus_name"),
             CorpusVersion.translation_name.label("version_name"),
-            SpanEmbedding.vector.cosine_distance(query_vec).label("distance"),
+            distance_expr.label("distance"),
         )
         .join(SpanEmbedding, SpanEmbedding.embedding_span_id == EmbeddingSpan.id)
         .join(Unit, Unit.id == EmbeddingSpan.start_unit_id)
@@ -170,30 +181,45 @@ def _span_vector_search(
             .where(EmbeddingSpanUnit.unit_id == exclude_unit_id)
             .exists()
         )
-    stmt = stmt.order_by("distance").offset(offset).limit(limit)
+    if result_grouping == "per_corpus":
+        ranked = stmt.add_columns(
+            func.row_number().over(
+                partition_by=EmbeddingSpan.corpus_id,
+                order_by=distance_expr,
+            ).label("corpus_rank")
+        ).subquery()
+        stmt = (
+            select(ranked)
+            .where(ranked.c.corpus_rank == 1)
+            .order_by(ranked.c.distance)
+            .offset(offset)
+            .limit(limit)
+        )
+    else:
+        stmt = stmt.order_by("distance").offset(offset).limit(limit)
 
     rows = db.execute(stmt).all()
-    support_by_span = _span_support_unit_ids(db, [span.id for span, *_ in rows])
+    support_by_span = _span_support_unit_ids(db, [row.span_id for row in rows])
     return [
         SearchResult(
-            id=span.id,
+            id=row.span_id,
             result_type="span",
-            text=span.text,
-            reference_label=span.reference_label or unit.reference_label,
-            ancestor_path=span.ancestor_path or unit.ancestor_path,
-            corpus_name=corpus_name,
-            corpus_version_name=version_name,
-            height=unit.height,
-            score=round(1.0 - float(distance), 4),
-            taxonomy=tax_map.get(span.corpus_id, []),
-            embedding_span_id=span.id,
+            text=row.text,
+            reference_label=row.span_reference_label or row.unit_reference_label,
+            ancestor_path=row.span_ancestor_path or row.unit_ancestor_path,
+            corpus_name=row.corpus_name,
+            corpus_version_name=row.version_name,
+            height=row.height,
+            score=round(1.0 - float(row.distance), 4),
+            taxonomy=tax_map.get(row.corpus_id, []),
+            embedding_span_id=row.span_id,
             embedding_profile_id=profile_id,
-            support_unit_ids=support_by_span.get(span.id, [span.start_unit_id]),
-            start_unit_id=span.start_unit_id,
-            end_unit_id=span.end_unit_id,
-            primary_unit_id=span.start_unit_id,
+            support_unit_ids=support_by_span.get(row.span_id, [row.start_unit_id]),
+            start_unit_id=row.start_unit_id,
+            end_unit_id=row.end_unit_id,
+            primary_unit_id=row.start_unit_id,
         )
-        for span, unit, corpus_name, version_name, distance in rows
+        for row in rows
     ]
 
 
@@ -211,18 +237,25 @@ def _vector_search(
     tax_map: dict[int, list[TaxonomyLabel]],
     exclude_unit_id: int | None = None,
     offset: int = 0,
+    result_grouping: str = "global",
 ) -> list[SearchResult]:
     if corpus_ids is not None and len(corpus_ids) == 0:
         return []
     if corpus_version_ids is not None and len(corpus_version_ids) == 0:
         return []
 
+    distance_expr = Embedding.vector.cosine_distance(query_vec)
     stmt = (
         select(
-            Unit,
+            Unit.id.label("unit_id"),
+            Unit.text.label("text"),
+            Unit.reference_label.label("reference_label"),
+            Unit.ancestor_path.label("ancestor_path"),
+            Unit.corpus_id.label("corpus_id"),
+            Unit.height.label("height"),
             Corpus.name.label("corpus_name"),
             CorpusVersion.translation_name.label("version_name"),
-            Embedding.vector.cosine_distance(query_vec).label("distance"),
+            distance_expr.label("distance"),
         )
         .join(Embedding, Embedding.unit_id == Unit.id)
         .join(Corpus, Corpus.id == Unit.corpus_id)
@@ -239,34 +272,51 @@ def _vector_search(
         stmt = stmt.where(Unit.corpus_version_id.in_(corpus_version_ids))
     if exclude_unit_id is not None:
         stmt = stmt.where(Unit.id != exclude_unit_id)
-    stmt = stmt.order_by("distance").offset(offset).limit(limit)
+    if result_grouping == "per_corpus":
+        ranked = stmt.add_columns(
+            func.row_number().over(
+                partition_by=Unit.corpus_id,
+                order_by=distance_expr,
+            ).label("corpus_rank")
+        ).subquery()
+        stmt = (
+            select(ranked)
+            .where(ranked.c.corpus_rank == 1)
+            .order_by(ranked.c.distance)
+            .offset(offset)
+            .limit(limit)
+        )
+    else:
+        stmt = stmt.order_by("distance").offset(offset).limit(limit)
 
     rows = db.execute(stmt).all()
     return [
         SearchResult(
-            id=unit.id,
+            id=row.unit_id,
             result_type="unit",
-            text=unit.text,
-            reference_label=unit.reference_label,
-            ancestor_path=unit.ancestor_path,
-            corpus_name=corpus_name,
-            corpus_version_name=version_name,
-            height=unit.height,
-            score=round(1.0 - float(distance), 4),
-            taxonomy=tax_map.get(unit.corpus_id, []),
+            text=row.text,
+            reference_label=row.reference_label,
+            ancestor_path=row.ancestor_path,
+            corpus_name=row.corpus_name,
+            corpus_version_name=row.version_name,
+            height=row.height,
+            score=round(1.0 - float(row.distance), 4),
+            taxonomy=tax_map.get(row.corpus_id, []),
             embedding_span_id=None,
             embedding_profile_id=None,
-            support_unit_ids=[unit.id],
-            start_unit_id=unit.id,
-            end_unit_id=unit.id,
-            primary_unit_id=unit.id,
+            support_unit_ids=[row.unit_id],
+            start_unit_id=row.unit_id,
+            end_unit_id=row.unit_id,
+            primary_unit_id=row.unit_id,
         )
-        for unit, corpus_name, version_name, distance in rows
+        for row in rows
     ]
 
 
 @router.post("/semantic", response_model=SearchResponse)
 def search_semantic(req: SemanticSearchRequest, db: Session = Depends(get_db)):
+    if req.result_grouping not in SEMANTIC_RESULT_GROUPINGS:
+        raise HTTPException(status_code=422, detail="Invalid semantic result grouping")
     method_id = req.method_id or _default_method_id(db)
     profile_id = req.embedding_profile_id if req.embedding_profile_id is not None else _default_profile_id(db)
     query_vec = embed_query(req.query)
@@ -275,23 +325,34 @@ def search_semantic(req: SemanticSearchRequest, db: Session = Depends(get_db)):
         results = _span_vector_search(
             db, query_vec, method_id, profile_id, req.height_min, req.height_max,
             req.depth_min, req.depth_max, req.corpus_ids, req.corpus_version_ids,
-            req.limit, tax_map, offset=req.offset,
+            req.limit, tax_map, offset=req.offset, result_grouping=req.result_grouping,
         )
-        return SearchResponse(results=results, mode="semantic", embedding_profile_id=profile_id)
+        return SearchResponse(
+            results=results,
+            mode="semantic",
+            embedding_profile_id=profile_id,
+            result_grouping=req.result_grouping,
+        )
     results = _vector_search(
         db, query_vec, method_id, req.height_min, req.height_max, req.depth_min, req.depth_max,
         req.corpus_ids, req.corpus_version_ids, req.limit, tax_map, offset=req.offset,
+        result_grouping=req.result_grouping,
     )
-    return SearchResponse(results=results, mode="semantic", embedding_profile_id=None)
+    return SearchResponse(
+        results=results,
+        mode="semantic",
+        embedding_profile_id=None,
+        result_grouping=req.result_grouping,
+    )
 
 
 @router.post("/keyword", response_model=SearchResponse)
 def search_keyword(req: KeywordSearchRequest, db: Session = Depends(get_db)):
     tax_map = build_corpus_taxonomy_map(db)
     if req.corpus_ids is not None and len(req.corpus_ids) == 0:
-        return SearchResponse(results=[], mode="keyword")
+        return SearchResponse(results=[], mode="keyword", result_grouping="global")
     if req.corpus_version_ids is not None and len(req.corpus_version_ids) == 0:
-        return SearchResponse(results=[], mode="keyword")
+        return SearchResponse(results=[], mode="keyword", result_grouping="global")
     stmt = (
         select(Unit, Corpus.name, CorpusVersion.translation_name)
         .join(Corpus, Corpus.id == Unit.corpus_id)
@@ -339,6 +400,7 @@ def search_keyword(req: KeywordSearchRequest, db: Session = Depends(get_db)):
             for unit, corpus_name, version_name in rows
         ],
         mode="keyword",
+        result_grouping="global",
     )
 
 
@@ -365,10 +427,20 @@ def search_passage(req: PassageSearchRequest, db: Session = Depends(get_db)):
             req.depth_min, req.depth_max, req.corpus_ids, req.corpus_version_ids,
             req.limit, tax_map, exclude_id, offset=req.offset,
         )
-        return SearchResponse(results=results, mode="passage", embedding_profile_id=profile_id)
+        return SearchResponse(
+            results=results,
+            mode="passage",
+            embedding_profile_id=profile_id,
+            result_grouping="global",
+        )
     results = _vector_search(
         db, list(vector), method_id, req.height_min, req.height_max,
         req.depth_min, req.depth_max, req.corpus_ids, req.corpus_version_ids,
         req.limit, tax_map, exclude_id, offset=req.offset,
     )
-    return SearchResponse(results=results, mode="passage", embedding_profile_id=None)
+    return SearchResponse(
+        results=results,
+        mode="passage",
+        embedding_profile_id=None,
+        result_grouping="global",
+    )

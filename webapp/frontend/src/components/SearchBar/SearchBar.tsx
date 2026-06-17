@@ -1,5 +1,10 @@
 import { useRef } from 'react'
 import type { CorpusInfo, UnitBrief } from '../../api/types'
+import {
+  SEMANTIC_SEARCH_GROUPING_LABELS,
+  SEMANTIC_SEARCH_GROUPINGS,
+  type SemanticSearchGrouping,
+} from '../../utils/semanticSearchGrouping'
 import { SEARCH_MODE_LABELS, SEARCH_MODES, type SearchMode } from '../../utils/searchModes'
 import { PassagePicker } from '../PassagePicker/PassagePicker'
 import styles from './SearchBar.module.css'
@@ -9,6 +14,8 @@ interface Props {
   onModeChange: (mode: SearchMode) => void
   textQuery: string
   onTextQueryChange: (q: string) => void
+  semanticGrouping: SemanticSearchGrouping
+  onSemanticGroupingChange: (grouping: SemanticSearchGrouping) => void
   selectedUnit: UnitBrief | null
   onSelectedUnitChange: (unit: UnitBrief | null) => void
   filtersOpen: boolean
@@ -24,6 +31,8 @@ export function SearchBar({
   onModeChange,
   textQuery,
   onTextQueryChange,
+  semanticGrouping,
+  onSemanticGroupingChange,
   selectedUnit,
   onSelectedUnitChange,
   filtersOpen,
@@ -95,6 +104,23 @@ export function SearchBar({
           />
         )}
       </div>
+
+      {mode === 'semantic' && (
+        <label className={styles.groupingField}>
+          <span className={styles.groupingLabel}>Semantic results</span>
+          <select
+            className={styles.groupingSelect}
+            value={semanticGrouping}
+            onChange={(e) => onSemanticGroupingChange(e.target.value as SemanticSearchGrouping)}
+          >
+            {SEMANTIC_SEARCH_GROUPINGS.map((grouping) => (
+              <option key={grouping} value={grouping}>
+                {SEMANTIC_SEARCH_GROUPING_LABELS[grouping]}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <div className={styles.bottomRow}>
         <button

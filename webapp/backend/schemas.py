@@ -144,12 +144,14 @@ class SearchResponse(BaseModel):
     results: list[SearchResult]
     mode: str  # "semantic" | "keyword" | "passage"
     embedding_profile_id: int | None = None
+    result_grouping: str = "global"
 
 
 class SemanticSearchRequest(BaseModel):
     query: str
     method_id: int | None = None
     embedding_profile_id: int | None = None
+    result_grouping: str = "global"
     height_min: int | None = None
     height_max: int | None = None
     depth_min: int | None = None

@@ -8,6 +8,11 @@ import {
   SEARCH_MODES,
   type SearchMode,
 } from '../../utils/searchModes';
+import {
+  SEMANTIC_SEARCH_GROUPING_LABELS,
+  SEMANTIC_SEARCH_GROUPINGS,
+  type SemanticSearchGrouping,
+} from '../../utils/semanticSearchGrouping';
 import { getCorpusColor } from '../../utils/taxonomyColors';
 import { PassagePicker } from '../PassagePicker/PassagePicker';
 import styles from './MapSearchPanel.module.css';
@@ -133,6 +138,7 @@ interface SearchFilters {
 
 interface ActiveSearch {
   mode: SearchMode;
+  semanticGrouping: SemanticSearchGrouping;
   label: string;
   query?: string;
   unitId?: number;
@@ -181,6 +187,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
   onResultHover,
 }, ref) {
   const [mode, setMode] = useState<SearchMode>('semantic');
+  const [semanticGrouping, setSemanticGrouping] = useState<SemanticSearchGrouping>('global');
   const [textQuery, setTextQuery] = useState('');
   const [selectedUnit, setSelectedUnit] = useState<UnitBrief | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -227,6 +234,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
     offset = 0,
     limit = SEARCH_LIMIT,
     filters: SearchFilters = buildSearchRequestFilters(),
+    grouping: SemanticSearchGrouping = semanticGrouping,
   ): any {
     if (mode === 'passage') {
       if (unitId == null) throw new Error('Missing passage unit');
@@ -242,6 +250,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
     return {
       query,
       embedding_profile_id: selectedEmbeddingProfileId,
+      result_grouping: grouping,
       limit,
       offset,
       ...filters,
@@ -268,6 +277,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
         setActiveMode('passage');
         setActiveSearch({
           mode: 'passage',
+          semanticGrouping: 'global',
           label,
           unitId,
           anchorUnitId: unitId,
@@ -372,6 +382,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
       commitResults(filtered, mode, label, anchorId);
       setActiveSearch({
         mode,
+        semanticGrouping,
         label,
         query: mode === 'passage' ? undefined : query,
         unitId: mode === 'passage' ? unit!.id : undefined,
@@ -409,6 +420,7 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
       commitResults(filtered, 'passage', label, unitId);
       setActiveSearch({
         mode: 'passage',
+        semanticGrouping: 'global',
         label,
         unitId,
         anchorUnitId: unitId,
@@ -455,7 +467,15 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
       let page: SearchResult[] = [];
       if (activeSearch.mode === 'semantic') {
         page = (await searchSemantic(
-          buildSearchRequestBody('semantic', activeSearch.query ?? '', undefined, nextOffset, SEARCH_LIMIT, activeSearch.filters),
+          buildSearchRequestBody(
+            'semantic',
+            activeSearch.query ?? '',
+            undefined,
+            nextOffset,
+            SEARCH_LIMIT,
+            activeSearch.filters,
+            activeSearch.semanticGrouping,
+          ),
         )).results;
       } else if (activeSearch.mode === 'keyword') {
         page = (await searchKeyword(
@@ -568,6 +588,23 @@ export const MapSearchPanel = forwardRef<MapSearchPanelHandle, MapSearchPanelPro
             />
           )}
         </div>
+
+        {mode === 'semantic' && (
+          <label className={styles.profileField}>
+            <span className={styles.profileLabel}>Semantic results</span>
+            <select
+              className={styles.profileSelect}
+              value={semanticGrouping}
+              onChange={(e) => setSemanticGrouping(e.target.value as SemanticSearchGrouping)}
+            >
+              {SEMANTIC_SEARCH_GROUPINGS.map((grouping) => (
+                <option key={grouping} value={grouping}>
+                  {SEMANTIC_SEARCH_GROUPING_LABELS[grouping]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {embeddingProfiles.length > 0 && (
           <label className={styles.profileField}>

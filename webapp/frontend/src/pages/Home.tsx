@@ -11,6 +11,7 @@ import type { SearchResponse, UnitBrief } from '../api/types'
 import { FilterPanel, type Filters } from '../components/FilterPanel/FilterPanel'
 import { ResultCard } from '../components/ResultCard/ResultCard'
 import { SearchBar } from '../components/SearchBar/SearchBar'
+import type { SemanticSearchGrouping } from '../utils/semanticSearchGrouping'
 import type { SearchMode } from '../utils/searchModes'
 import styles from './Home.module.css'
 
@@ -18,6 +19,7 @@ const DEFAULT_FILTERS: Filters = { corpusIds: [], heightMin: 0, heightMax: 0, li
 
 export function Home() {
   const [mode, setMode] = useState<SearchMode>('semantic')
+  const [semanticGrouping, setSemanticGrouping] = useState<SemanticSearchGrouping>('global')
   const [textQuery, setTextQuery] = useState('')
   const [selectedUnit, setSelectedUnit] = useState<UnitBrief | null>(null)
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
@@ -82,7 +84,7 @@ export function Home() {
       const shared = buildShared(0)
 
       if (mode === 'semantic') {
-        res = await searchSemantic({ query: textQuery, ...shared })
+        res = await searchSemantic({ query: textQuery, result_grouping: semanticGrouping, ...shared })
       } else if (mode === 'keyword') {
         res = await searchKeyword({ query: textQuery, corpus_ids: shared.corpus_ids, limit: shared.limit, offset: 0 })
       } else {
@@ -128,7 +130,7 @@ export function Home() {
       const shared = buildShared(offset)
 
       if (results.mode === 'semantic') {
-        res = await searchSemantic({ query: textQuery, ...shared })
+        res = await searchSemantic({ query: textQuery, result_grouping: results.result_grouping, ...shared })
       } else if (results.mode === 'keyword') {
         res = await searchKeyword({ query: textQuery, corpus_ids: shared.corpus_ids, limit: shared.limit, offset })
       } else {
@@ -159,6 +161,8 @@ export function Home() {
           onModeChange={setMode}
           textQuery={textQuery}
           onTextQueryChange={setTextQuery}
+          semanticGrouping={semanticGrouping}
+          onSemanticGroupingChange={setSemanticGrouping}
           selectedUnit={selectedUnit}
           onSelectedUnitChange={setSelectedUnit}
           filtersOpen={filtersOpen}
