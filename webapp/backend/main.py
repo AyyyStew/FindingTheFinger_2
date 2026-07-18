@@ -5,6 +5,7 @@ Run from the project root:
     uvicorn webapp.backend.main:app --reload
 """
 from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,9 +16,26 @@ from .embedder import get_model
 from .routers import corpora, search, units
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ALLOWED_ORIGINS")
+    if raw:
+        origins = [item.strip() for item in raw.split(",") if item.strip()]
+        if origins:
+            return origins
+    return ["http://localhost:5173"]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    get_model()  # load nomic at startup so first search is not slow
+    if _env_flag("PRELOAD_EMBED_MODEL", default=False):
+        get_model()
     yield
 
 
@@ -25,10 +43,16 @@ app = FastAPI(title="FindingTheFinger API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/api/healthz")
+def healthz():
+    return {"ok": True}
+
 
 app.include_router(search.router)
 app.include_router(corpora.router)

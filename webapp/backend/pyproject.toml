@@ -3,9 +3,8 @@ name = "ftf-backend"
 version = "0.1.0"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "einops",
+    "alembic",
     "fastapi",
-    "ftf-db",
     "pgvector",
     "psycopg[binary]",
     "pydantic",
@@ -17,6 +16,3 @@ dependencies = [
 
 [tool.uv]
 package = false
-
-[tool.uv.sources]
-ftf-db = { workspace = true }

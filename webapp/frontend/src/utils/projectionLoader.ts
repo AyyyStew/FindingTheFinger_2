@@ -16,7 +16,10 @@
  * toggle specific versions independently.
  */
 
-const BASE_URL = '/static/dimreduction';
+const STATIC_BASE_URL = (
+  import.meta.env.VITE_STATIC_BASE_URL?.trim().replace(/\/+$/, '') || '/static'
+);
+const BASE_URL = `${STATIC_BASE_URL}/dimreduction`;
 
 // ── Method type ───────────────────────────────────────────────────────────────
 

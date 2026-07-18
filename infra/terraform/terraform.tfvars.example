@@ -1,0 +1,17 @@
+project_name          = "finding-the-finger"
+server_type           = "cpx31"
+location              = "ash"
+domain                = "example.com"
+hostname              = "ftf"
+hcloud_ssh_keys       = []
+ssh_allowed_cidrs     = ["203.0.113.10/32"]
+create_r2_buckets     = true
+cloudflare_account_id = "your-cloudflare-account-id"
+
+r2_projection_bucket_name      = "finding-the-finger"
+r2_db_bucket_name              = "finding-the-finger"
+cloudflare_r2_public_base_url  = "https://static.findingthefinger.ayyystew.com"
+
+app_http_port        = 80
+cors_allowed_origins = "https://ftf.example.com"
+db_restore_url       = "https://static.findingthefinger.ayyystew.com/db/releases/2026-07-18/ftf_20260716.sql.gz"

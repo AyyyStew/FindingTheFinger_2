@@ -27,17 +27,24 @@ from ..taxonomy import build_corpus_taxonomy_map
 
 router = APIRouter(prefix="/api/search")
 SEMANTIC_RESULT_GROUPINGS = {"global", "per_corpus"}
+LEGACY_METHOD_LABEL = "nomic-embed-text-v1.5/all-heights"
+SPAN_METHOD_LABEL = "nomic-embed-text-v1.5/span-windows"
 
 
 def _default_method_id(db: Session) -> int:
     method = db.execute(
-        select(Method).where(Method.label == "nomic-embed-text-v1.5/span-windows")
+        select(Method).where(Method.label == SPAN_METHOD_LABEL)
     ).scalars().first()
     if method is None:
         method = db.execute(select(Method)).scalars().first()
     if method is None:
         raise HTTPException(status_code=503, detail="No embedding methods in database")
     return method.id
+
+
+def _method_id_by_label(db: Session, label: str) -> int | None:
+    method = db.execute(select(Method).where(Method.label == label)).scalars().first()
+    return method.id if method is not None else None
 
 
 def _default_profile_id(db: Session) -> int | None:
@@ -105,6 +112,29 @@ def _unit_embedding_vector(db: Session, unit_id: int, method_id: int) -> list[fl
         .where(Embedding.method_id == method_id)
     ).scalar_one_or_none()
     return list(vector) if vector is not None else None
+
+
+def _reference_vector_for_unit(
+    db: Session,
+    unit_id: int,
+    requested_method_id: int,
+    profile_id: int | None,
+) -> tuple[list[float] | None, int]:
+    span_vector = _unit_span_vector(db, unit_id, requested_method_id, profile_id)
+    if span_vector is not None:
+        return span_vector, requested_method_id
+
+    unit_vector = _unit_embedding_vector(db, unit_id, requested_method_id)
+    if unit_vector is not None:
+        return unit_vector, requested_method_id
+
+    legacy_method_id = _method_id_by_label(db, LEGACY_METHOD_LABEL)
+    if legacy_method_id is not None and legacy_method_id != requested_method_id:
+        legacy_vector = _unit_embedding_vector(db, unit_id, legacy_method_id)
+        if legacy_vector is not None:
+            return legacy_vector, legacy_method_id
+
+    return None, requested_method_id
 
 
 def _span_support_unit_ids(db: Session, span_ids: list[int]) -> dict[int, list[int]]:
@@ -319,7 +349,10 @@ def search_semantic(req: SemanticSearchRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail="Invalid semantic result grouping")
     method_id = req.method_id or _default_method_id(db)
     profile_id = req.embedding_profile_id if req.embedding_profile_id is not None else _default_profile_id(db)
-    query_vec = embed_query(req.query)
+    try:
+        query_vec = embed_query(req.query)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     tax_map = build_corpus_taxonomy_map(db)
     if _has_span_embeddings(db, method_id, profile_id):
         results = _span_vector_search(
@@ -406,18 +439,16 @@ def search_keyword(req: KeywordSearchRequest, db: Session = Depends(get_db)):
 
 @router.post("/passage", response_model=SearchResponse)
 def search_passage(req: PassageSearchRequest, db: Session = Depends(get_db)):
-    method_id = req.method_id or _default_method_id(db)
+    requested_method_id = req.method_id or _default_method_id(db)
     profile_id = req.embedding_profile_id if req.embedding_profile_id is not None else _default_profile_id(db)
     tax_map = build_corpus_taxonomy_map(db)
 
-    vector = _unit_span_vector(db, req.unit_id, method_id, profile_id)
-    if vector is None:
-        vector = _unit_embedding_vector(db, req.unit_id, method_id)
+    vector, method_id = _reference_vector_for_unit(db, req.unit_id, requested_method_id, profile_id)
 
     if vector is None:
         raise HTTPException(
             status_code=404,
-            detail=f"No embedding found for unit {req.unit_id} with method {method_id}",
+            detail=f"No embedding found for unit {req.unit_id} with method {requested_method_id}",
         )
 
     exclude_id = req.unit_id if req.exclude_self else None

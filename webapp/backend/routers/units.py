@@ -29,6 +29,8 @@ from ..schemas import (
 from ..taxonomy import build_corpus_taxonomy_map
 
 router = APIRouter(prefix="/api/units")
+LEGACY_METHOD_LABEL = "nomic-embed-text-v1.5/all-heights"
+SPAN_METHOD_LABEL = "nomic-embed-text-v1.5/span-windows"
 
 
 def _row_to_brief(
@@ -52,13 +54,18 @@ def _row_to_brief(
 
 def _default_method_id(db: Session) -> int:
     method = db.execute(
-        select(Method).where(Method.label == "nomic-embed-text-v1.5/span-windows")
+        select(Method).where(Method.label == SPAN_METHOD_LABEL)
     ).scalars().first()
     if method is None:
         method = db.execute(select(Method)).scalars().first()
     if method is None:
         raise HTTPException(status_code=503, detail="No embedding methods in database")
     return method.id
+
+
+def _method_id_by_label(db: Session, label: str) -> int | None:
+    method = db.execute(select(Method).where(Method.label == label)).scalars().first()
+    return method.id if method is not None else None
 
 
 def _default_profile_id(db: Session) -> int | None:
@@ -124,19 +131,30 @@ def _fetch_span_embedding(db: Session, unit_id: int, method_id: int, profile_id:
 def _fetch_embedding(db: Session, unit_id: int, method_id: int, profile_id: int | None = None):
     span_vector = _fetch_span_embedding(db, unit_id, method_id, profile_id)
     if span_vector is not None:
-        return span_vector
+        return span_vector, method_id
 
     vector = db.execute(
         select(Embedding.vector)
         .where(Embedding.unit_id == unit_id)
         .where(Embedding.method_id == method_id)
     ).scalar_one_or_none()
-    if vector is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No embedding found for unit {unit_id} with method {method_id}",
-        )
-    return vector
+    if vector is not None:
+        return vector, method_id
+
+    legacy_method_id = _method_id_by_label(db, LEGACY_METHOD_LABEL)
+    if legacy_method_id is not None and legacy_method_id != method_id:
+        legacy_vector = db.execute(
+            select(Embedding.vector)
+            .where(Embedding.unit_id == unit_id)
+            .where(Embedding.method_id == legacy_method_id)
+        ).scalar_one_or_none()
+        if legacy_vector is not None:
+            return legacy_vector, legacy_method_id
+
+    raise HTTPException(
+        status_code=404,
+        detail=f"No embedding found for unit {unit_id} with method {method_id}",
+    )
 
 
 def _cosine_similarity(left: list[float], right: list[float]) -> float:
@@ -363,10 +381,11 @@ def get_unit_detail(unit_id: int, db: Session = Depends(get_db)):
 
 @router.post("/compare", response_model=CompareResponse)
 def compare_units(req: CompareRequest, db: Session = Depends(get_db)):
-    method_id = req.method_id or _default_method_id(db)
+    requested_method_id = req.method_id or _default_method_id(db)
     profile_id = req.embedding_profile_id if req.embedding_profile_id is not None else _default_profile_id(db)
     reference_unit = _fetch_unit_brief(db, req.reference_unit_id)
-    reference_vector = list(_fetch_embedding(db, req.reference_unit_id, method_id, profile_id))
+    reference_raw_vector, method_id = _fetch_embedding(db, req.reference_unit_id, requested_method_id, profile_id)
+    reference_vector = list(reference_raw_vector)
 
     if not req.unit_ids:
         return CompareResponse(reference_unit=reference_unit, method_id=method_id, embedding_profile_id=profile_id, items=[])
