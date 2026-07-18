@@ -1,5 +1,7 @@
 # Finding The Finger
 
+> _The finger pointing at the moon is not the moon._ — Zen proverb
+
 Finding The Finger is a text-ingestion and exploration project for comparing religious, philosophical, and historical corpora across a shared semantic space.
 
 At a high level, this repo:
@@ -9,6 +11,14 @@ At a high level, this repo:
 - generates derived embedding spans and dimensionality-reduction artifacts
 - serves a FastAPI backend for search and text navigation
 - serves a Vite/React frontend for browsing corpora, reading passages, and exploring projection maps
+
+## Project Origins and History
+
+This started as a data analysis project to compare religous texts.( [Repo](https://github.com/AyyyStew/ComparingFoundationalDocuments), [Write Up](https://ayyystew.github.io/ComparingFoundationalDocuments/) )
+
+Then it evolved into a web app for epxloration ( [ver1](https://github.com/AyyyStew/FindingTheFinger) )
+
+This repo is a more evolved version of that wep app with additional features, a different data modle and more.
 
 ## What Is In Here
 
